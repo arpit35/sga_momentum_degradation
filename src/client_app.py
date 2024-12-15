@@ -2,14 +2,9 @@ import torch
 from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
 
-from src.ml_models.res_net_18 import (
-    Net,
-    get_weights,
-    load_data,
-    set_weights,
-    test,
-    train,
-)
+from data_loader import DataLoader
+from ml_models.utils import get_weights, set_weights
+from src.ml_models.res_net_18 import Net, test, train
 
 
 # Define Flower Client
@@ -47,11 +42,16 @@ def client_fn(context: Context):
 
     # Read the node_config to fetch data partition associated to this node
     partition_id = context.node_config["partition-id"]
-    num_partitions = context.node_config["num-partitions"]
 
     # Read run_config to fetch hyperparameters relevant to this run
-    batch_size = context.run_config["batch-size"]
-    trainloader, valloader = load_data(partition_id, num_partitions, batch_size)
+    dataloader = DataLoader(
+        dataset_name=str(context.run_config["mnist"]),
+        num_clients=int(context.node_config["num-partitions"]),
+        batch_size=int(context.run_config["batch-size"]),
+        alpha=int(context.run_config["data-loader-alpha"]),
+    )
+    trainloader, valloader = dataloader.load_partition(partition_id=int(partition_id))
+
     local_epochs = context.run_config["local-epochs"]
     learning_rate = context.run_config["learning-rate"]
 

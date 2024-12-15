@@ -4,7 +4,8 @@ from flwr.common import Context, Metrics, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 from flwr.server.strategy import FedAvg
 
-from src.ml_models.res_net_18 import Net, get_weights
+from ml_models.utils import get_weights
+from src.ml_models.res_net_18 import Net
 
 
 # Define metric aggregation function
@@ -20,6 +21,8 @@ def weighted_average(metrics: List[Tuple[int, Metrics]]) -> Metrics:
 def server_fn(context: Context):
     """Construct components that set the ServerApp behaviour."""
 
+    print("Server context:", context)
+
     # Read from config
     num_rounds = context.run_config["num-server-rounds"]
 
@@ -30,12 +33,12 @@ def server_fn(context: Context):
     # Define the strategy
     strategy = FedAvg(
         fraction_fit=1.0,
-        fraction_evaluate=context.run_config["fraction-evaluate"],
+        fraction_evaluate=float(context.run_config["fraction-evaluate"]),
         min_available_clients=2,
         evaluate_metrics_aggregation_fn=weighted_average,
         initial_parameters=parameters,
     )
-    config = ServerConfig(num_rounds=num_rounds)
+    config = ServerConfig(num_rounds=int(num_rounds))
 
     return ServerAppComponents(strategy=strategy, config=config)
 
