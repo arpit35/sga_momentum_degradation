@@ -1,0 +1,18 @@
+services:
+  sga_momentum_degradation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sga_momentum_degradation
+    env_file:
+      - .env
+    networks:
+      - bridge
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+
+networks:
+  bridge:
+    name: sga_momentum_degradation_network
+    driver: bridge
