@@ -9,12 +9,13 @@ from src.ml_models.utils import get_weights, set_weights
 
 # Define Flower Client
 class FlowerClient(NumPyClient):
-    def __init__(self, trainloader, valloader, local_epochs, learning_rate):
+    def __init__(self, trainloader, valloader, local_epochs, learning_rate, momentum):
         self.net = Net()
         self.trainloader = trainloader
         self.valloader = valloader
         self.local_epochs = local_epochs
         self.lr = learning_rate
+        self.momentum = momentum
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     def fit(self, parameters, config):
@@ -26,6 +27,7 @@ class FlowerClient(NumPyClient):
             self.valloader,
             self.local_epochs,
             self.lr,
+            self.momentum,
             self.device,
         )
         return get_weights(self.net), len(self.trainloader.dataset), results
@@ -54,9 +56,12 @@ def client_fn(context: Context):
 
     local_epochs = context.run_config["local-epochs"]
     learning_rate = context.run_config["learning-rate"]
+    momentum = context.run_config["momentum"]
 
     # Return Client instance
-    return FlowerClient(trainloader, valloader, local_epochs, learning_rate).to_client()
+    return FlowerClient(
+        trainloader, valloader, local_epochs, learning_rate, momentum
+    ).to_client()
 
 
 # Flower ClientApp

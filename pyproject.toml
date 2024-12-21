@@ -30,9 +30,10 @@ clientapp = "src.client_app:app"
 [tool.flwr.app.config]
 num-server-rounds = 20
 fraction-evaluate = 0.5
-local-epochs = 1
-learning-rate = 0.1
-batch-size = 32
+local-epochs = 3
+learning-rate = 0.005
+momentum = 0.9
+batch-size = 128
 dataset_name = "mnist"
 data-loader-alpha = 0.1
 
