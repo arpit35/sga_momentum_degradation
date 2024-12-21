@@ -15,7 +15,10 @@ class DataLoader:
         self.alpha = alpha
         if self.dataset_name == "mnist":
             self.pytorch_transforms = transforms.Compose(
-                [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.5,), (0.5,)),
+                ]
             )
 
     def _apply_transforms(self, batch):

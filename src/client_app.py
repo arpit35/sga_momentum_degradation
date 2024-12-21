@@ -2,9 +2,9 @@ import torch
 from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
 
-from data_loader import DataLoader
-from ml_models.utils import get_weights, set_weights
-from src.ml_models.res_net_18 import Net, test, train
+from src.data_loader import DataLoader
+from src.ml_models.net import Net, test, train
+from src.ml_models.utils import get_weights, set_weights
 
 
 # Define Flower Client
@@ -45,10 +45,10 @@ def client_fn(context: Context):
 
     # Read run_config to fetch hyperparameters relevant to this run
     dataloader = DataLoader(
-        dataset_name=str(context.run_config["mnist"]),
+        dataset_name=str(context.run_config["dataset_name"]),
         num_clients=int(context.node_config["num-partitions"]),
         batch_size=int(context.run_config["batch-size"]),
-        alpha=int(context.run_config["data-loader-alpha"]),
+        alpha=float(context.run_config["data-loader-alpha"]),
     )
     trainloader, valloader = dataloader.load_partition(partition_id=int(partition_id))
 

@@ -4,8 +4,8 @@ from flwr.common import Context, Metrics, ndarrays_to_parameters
 from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 from flwr.server.strategy import FedAvg
 
-from ml_models.utils import get_weights
-from src.ml_models.res_net_18 import Net
+from src.ml_models.net import Net
+from src.ml_models.utils import get_weights
 
 
 # Define metric aggregation function
