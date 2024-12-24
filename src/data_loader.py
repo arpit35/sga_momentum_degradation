@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import DirichletPartitioner
 from torch.utils.data import DataLoader as TorchDataLoader
@@ -53,39 +52,3 @@ class DataLoader:
             partition_train_test["test"], batch_size=self.batch_size
         )
         return trainloader, valloader
-
-    def load_test_set(self):
-        # Specify partitioners as empty (since test set does not need partitioning)
-        fds = FederatedDataset(dataset=self.dataset_name, partitioners={})
-        testset = fds.load_split("test").with_transform(self._apply_transforms)
-        testloader = TorchDataLoader(testset, batch_size=self.batch_size)
-        return testloader
-
-    def print_partition_sizes(self, trainloader, valloader, testloader):
-        train_size = len(trainloader.dataset)
-        val_size = len(valloader.dataset)
-        test_size = len(testloader.dataset)
-
-        print(f"Training set size: {train_size}")
-        print(f"Validation set size: {val_size}")
-        print(f"Test set size: {test_size}")
-
-    def visualize_batch(self, dataloader):
-
-        batch = next(iter(dataloader))
-        images, labels = batch["image"], batch["label"]
-
-        # Reshape and convert images to NumPy arrays
-        images = images.permute(0, 2, 3, 1).numpy()
-        images = images / 2 + 0.5  # Denormalize
-
-        # Create a figure and a grid of subplots
-        fig, axs = plt.subplots(4, 8, figsize=(12, 6))
-        for i, ax in enumerate(axs.flat):
-            if i < len(images):
-                ax.imshow(images[i])
-                ax.set_title(str(labels[i].item()))
-                ax.axis("off")
-
-        plt.tight_layout()
-        plt.show()

@@ -1,3 +1,5 @@
+import random
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -33,14 +35,18 @@ class Net(nn.Module):
 fds = None  # Cache FederatedDataset
 
 
-def train(net, trainloader, valloader, epochs, learning_rate, momentum, device):
-    """Train the model on the training set."""
+def train(net, trainloader, valloader, epochs, learning_rate, device, SGA=False):
     net.to(device)  # move model to GPU if available
     criterion = torch.nn.CrossEntropyLoss().to(device)
-    optimizer = torch.optim.SGD(net.parameters(), lr=learning_rate, momentum=momentum)
+
+    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, maximize=SGA)
     net.train()
+
+    # Randomly selecting batches
+    random_batches = random.sample(list(trainloader), 5)
+
     for _ in range(epochs):
-        for batch in trainloader:
+        for batch in random_batches:
             images = batch["image"]
             labels = batch["label"]
             optimizer.zero_grad()
