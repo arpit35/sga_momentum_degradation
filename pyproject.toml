@@ -7,15 +7,6 @@ name = "sga_momentum_degradation"
 version = "1.0.0"
 description = "Federated Learning with PyTorch and Flower (Quickstart Example)"
 license = "Apache-2.0"
-dependencies = [
-    "torch --index-url https://download.pytorch.org/whl/cu121",
-    "torchvision --index-url https://download.pytorch.org/whl/cu121",
-    "torchaudio --index-url https://download.pytorch.org/whl/cu121",
-    "seaborn",
-    "matplotlib",
-    "flwr[simulation]",
-    "flwr-datasets[vision]"
-]
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
@@ -29,14 +20,15 @@ clientapp = "src.client_app:app"
 
 [tool.flwr.app.config]
 num-of-clients = 3
-num-of-random-batches-per-round = 5
 num-server-rounds = 3
+num-batches-each-round = 5
 fraction-evaluate = 1
 local-epochs = 3
 learning-rate = 0.001
 batch-size = 128
-dataset_name = "mnist"
+dataset-name = "mnist"
 data-loader-alpha = 0.1
+prepare-dataset = false
 
 [tool.flwr.federations]
 default = "local-simulation"

@@ -44,18 +44,19 @@ class FlowerClient(NumPyClient):
         unlearning_initiated_by_client_id = config.get(
             "unlearning_initiated_by_client_id", -1
         )
+
         self.logger.info("config: %s", config)
         self.logger.info("Client %s | Round %s", self.client_id, current_round)
         self.logger.info(
             "len(self.trainloader.dataset): %s", len(self.trainloader.dataset)
         )
 
+        results["client_id"] = self.client_id
+
         if current_round == 2 and self.client_id == 0:
             self.logger.info("Unlearning initiated by the client: %s", self.client_id)
             results = {"unlearning_initiated_by_client_id": self.client_id}
             self.sga = True
-        else:
-            results = {}
 
         if unlearning_initiated_by_client_id == self.client_id:
             self.sga = True
