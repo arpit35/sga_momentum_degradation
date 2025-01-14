@@ -83,3 +83,17 @@ class DataLoader:
                     client_dir, f"train_data_for_round_{round_num}.pt"
                 )
                 torch.save(batches, round_path)
+
+
+def load_client_data(client_id: int, current_round: int):
+    client_dir = os.path.join("src/clients_dataset", f"client_{client_id}")
+
+    # Load validation dataset
+    val_path = os.path.join(client_dir, "val_data.pt")
+    val_batches = torch.load(val_path)
+
+    # Load train dataset for the specified round
+    round_path = os.path.join(client_dir, f"train_data_for_round_{current_round}.pt")
+    train_batches = torch.load(round_path)
+
+    return train_batches, val_batches
