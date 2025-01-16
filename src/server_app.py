@@ -81,7 +81,6 @@ class UnlearningFedAvg(FedAvg):
             fit_ins.config["unlearning_initiated_by_client_id"] = (
                 self.unlearning_initiated_by_client_id
             )
-            fit_ins.config["command"] = self.command
             print("fit_ins.config", fit_ins.config)
 
         return client_fit_pairs
@@ -128,9 +127,12 @@ class UnlearningFedAvg(FedAvg):
 
         results = filtered_results
 
-        aggregated_ndarrays = aggregate_inplace(results)
+        print("results", results)
 
-        parameters_aggregated = ndarrays_to_parameters(aggregated_ndarrays)
+        if results:
+            aggregated_ndarrays = aggregate_inplace(results)
+
+            parameters_aggregated = ndarrays_to_parameters(aggregated_ndarrays)
 
         # Aggregate custom metrics if aggregation fn was provided
         metrics_aggregated = {}

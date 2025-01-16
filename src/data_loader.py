@@ -80,20 +80,26 @@ class DataLoader:
                 end_index = start_index + num_batches_each_round
                 batches = train_batches[start_index:end_index]
                 round_path = os.path.join(
-                    client_dir, f"train_data_for_round_{round_num}.pt"
+                    client_dir, f"train_data_for_round_{round_num + 1}.pt"
                 )
                 torch.save(batches, round_path)
 
 
-def load_client_data(client_id: int, current_round: int):
-    client_dir = os.path.join("src/clients_dataset", f"client_{client_id}")
+def load_client_data(type: str, client_id: int, current_round: int = None):
+    client_dir = os.path.join("src", "clients_dataset", f"client_{client_id}")
 
-    # Load validation dataset
-    val_path = os.path.join(client_dir, "val_data.pt")
-    val_batches = torch.load(val_path)
+    if type == "val":
+        # Load validation dataset
+        val_path = os.path.join(client_dir, "val_data.pt")
+        return torch.load(val_path, weights_only=False)
 
-    # Load train dataset for the specified round
-    round_path = os.path.join(client_dir, f"train_data_for_round_{current_round}.pt")
-    train_batches = torch.load(round_path)
+    if type == "train":
+        # Load train dataset for the specified round
+        round_path = os.path.join(
+            client_dir, f"train_data_for_round_{current_round}.pt"
+        )
+        return torch.load(round_path, weights_only=False)
 
-    return train_batches, val_batches
+
+def dataset_length(dataset):
+    return len(dataset[0]["image"]) * (len(dataset) - 1) + len(dataset[-1]["image"])

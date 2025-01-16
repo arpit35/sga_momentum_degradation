@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from src.data_loader import dataset_length
+
 
 class Net(nn.Module):
     def __init__(self):
@@ -57,18 +59,18 @@ def train(net, train_batches, val_batches, epochs, learning_rate, device, SGA=Fa
     return results
 
 
-def test(net, testloader, device):
+def test(net, test_batch, device):
     """Validate the model on the test set."""
     net.to(device)  # move model to GPU if available
     criterion = torch.nn.CrossEntropyLoss()
     correct, loss = 0, 0.0
     with torch.no_grad():
-        for batch in testloader:
+        for batch in test_batch:
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
             outputs = net(images)
             loss += criterion(outputs, labels).item()
             correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
-    accuracy = correct / len(testloader.dataset)
-    loss = loss / len(testloader)
+    accuracy = correct / dataset_length(test_batch)
+    loss = loss / dataset_length(test_batch)
     return loss, accuracy

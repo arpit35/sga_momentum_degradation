@@ -28,7 +28,7 @@ learning-rate = 0.001
 batch-size = 128
 dataset-name = "mnist"
 data-loader-alpha = 0.1
-prepare-dataset = false
+prepare-dataset = true
 
 [tool.flwr.federations]
 default = "local-simulation"
