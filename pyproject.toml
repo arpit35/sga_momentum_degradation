@@ -20,7 +20,7 @@ clientapp = "src.client_app:app"
 
 [tool.flwr.app.config]
 num-of-clients = 3
-num-server-rounds = 3
+num-server-rounds = 40
 num-batches-each-round = 5
 fraction-evaluate = 1
 local-epochs = 3

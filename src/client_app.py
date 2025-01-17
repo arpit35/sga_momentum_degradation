@@ -12,21 +12,21 @@ from src.utils.logger import get_logger
 class FlowerClient(NumPyClient):
     def __init__(
         self,
-        client_id,
+        client_number,
         local_epochs,
         learning_rate,
     ):
         super().__init__()
         self.net = Net()
-        self.client_id = client_id
+        self.client_number = client_number
         self.local_epochs = local_epochs
         self.lr = learning_rate
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Configure logging
-        self.logger = get_logger(f"{__name__}_Client_{client_id}", client_id)
+        self.logger = get_logger(f"{__name__}_Client_{client_number}", client_number)
 
-        self.logger.info("Client %s initiated", self.client_id)
+        self.logger.info("Client %s initiated", self.client_number)
 
     def fit(self, parameters, config):
         sga = False
@@ -34,28 +34,38 @@ class FlowerClient(NumPyClient):
         set_weights(self.net, parameters)
 
         current_round = config.get("current_round", 0)
-
-        unlearning_initiated_by_client_id = config.get(
-            "unlearning_initiated_by_client_id", -1
-        )
+        command = config.get("command", "")
+        unlearn_client_number = config.get("unlearn_client_number", -1)
 
         self.logger.info("config: %s", config)
-        self.logger.info("Client %s | Round %s", self.client_id, current_round)
+        self.logger.info("Client %s | Round %s", self.client_number, current_round)
+
+        if (
+            command == "degraded_model_refinement"
+            and self.client_number == unlearn_client_number
+        ):
+            self.logger.info(
+                "Client %s is not taking part due to 'degraded_model_refinement' command",
+                self.client_number,
+            )
+            return [], 0, {}
 
         results = {}
 
-        if current_round == 2 and self.client_id == 0:
-            self.logger.info("Unlearning initiated by the client: %s", self.client_id)
-            results = {"unlearning_initiated_by_client_id": self.client_id}
+        if current_round == 20 and self.client_number == 0:
+            self.logger.info(
+                "Unlearning initiated by the client: %s", self.client_number
+            )
+            results = {"unlearn_client_number": self.client_number}
             sga = True
 
-        if unlearning_initiated_by_client_id == self.client_id:
+        if unlearn_client_number == self.client_number:
             sga = True
 
         self.logger.info("sga: %s", sga)
 
-        train_batches = load_client_data("train", self.client_id, current_round)
-        val_batches = load_client_data("val", self.client_id)
+        train_batches = load_client_data("train", self.client_number, current_round)
+        val_batches = load_client_data("val", self.client_number)
 
         train_results = train(
             self.net,
@@ -69,6 +79,9 @@ class FlowerClient(NumPyClient):
 
         results.update(train_results)
 
+        self.logger.info("results %s", results)
+        self.logger.info("dataset_length %s", dataset_length(train_batches))
+
         return (
             get_weights(self.net),
             dataset_length(train_batches),
@@ -79,7 +92,7 @@ class FlowerClient(NumPyClient):
         self.logger.info("config: %s", config)
         set_weights(self.net, parameters)
 
-        val_batches = load_client_data("val", self.client_id)
+        val_batches = load_client_data("val", self.client_number)
 
         loss, accuracy = test(self.net, val_batches, self.device)
         return (

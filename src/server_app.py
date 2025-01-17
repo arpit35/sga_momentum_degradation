@@ -57,9 +57,9 @@ def custom_aggregate(results: list[tuple[NDArrays, float]]) -> NDArrays:
 class UnlearningFedAvg(FedAvg):
     def __init__(self, num_of_clients, **kwargs):
         super().__init__(**kwargs)
-        self.unlearning_initiated_by_client_id = -1
+        self.unlearn_client_number = -1
+        self.unlearn_client_id = -1
         self.command = ""
-        self.next_command = ""
         self.num_of_clients = num_of_clients
 
         self.degraded_model_parameters = None
@@ -75,13 +75,24 @@ class UnlearningFedAvg(FedAvg):
         )
 
         # Modifying the config for each FitIns object
-        for _, fit_ins in client_fit_pairs:
+        for client, fit_ins in client_fit_pairs:
             # Add the current round to the config
             fit_ins.config["current_round"] = server_round
-            fit_ins.config["unlearning_initiated_by_client_id"] = (
-                self.unlearning_initiated_by_client_id
-            )
+            fit_ins.config["unlearn_client_number"] = self.unlearn_client_number
+            fit_ins.config["command"] = self.command
             print("fit_ins.config", fit_ins.config)
+
+            if (
+                self.command == "global_model_restoration_and_degraded_model_unlearning"
+                and self.unlearn_client_id == client.cid
+            ):
+                fit_ins.parameters = self.degraded_model_parameters
+
+        if self.command == "degraded_model_refinement":
+            self.command = "global_model_unlearning"
+
+        elif self.command == "global_model_restoration_and_degraded_model_unlearning":
+            self.command = "degraded_model_refinement"
 
         return client_fit_pairs
 
@@ -92,77 +103,63 @@ class UnlearningFedAvg(FedAvg):
         if not self.accept_failures and failures:
             return None, {}
 
-        self.command = self.next_command
-
         filtered_results = []
         for client_proxy, fit_res in results:
-            unlearning_id = fit_res.metrics.get("unlearning_initiated_by_client_id", -1)
+            print("fit_res.metrics", fit_res.metrics)
+            if fit_res.metrics.get("unlearn_client_number", -1) != -1:
+                self.unlearn_client_number = fit_res.metrics.get(
+                    "unlearn_client_number"
+                )
 
-            if unlearning_id != -1 and self.unlearning_initiated_by_client_id == -1:
-                self.unlearning_initiated_by_client_id = unlearning_id
-                self.command = "initialize_degraded_model_and_merge_with_SGA_model_of_target_client"
+                self.unlearn_client_id = client_proxy.cid
 
-            if unlearning_id == self.unlearning_initiated_by_client_id:
-                if (
-                    self.command
-                    == "initialize_degraded_model_and_merge_with_SGA_model_of_target_client"
-                ):
-                    initial_degraded_model_with_rand_parameters = get_weights(Net())
-                    self.degraded_model_parameters = ndarrays_to_parameters(
-                        custom_aggregate(
-                            [
-                                (fit_res.parameters, 0.5),
-                                (initial_degraded_model_with_rand_parameters, 0.5),
-                            ]
-                        )
+                initial_degraded_model_with_rand_parameters = get_weights(Net())
+                self.degraded_model_parameters = ndarrays_to_parameters(
+                    custom_aggregate(
+                        [
+                            (initial_degraded_model_with_rand_parameters, 0.5),
+                            (parameters_to_ndarrays(fit_res.parameters), 0.5),
+                        ]
                     )
-                    self.command = "perform_fl_on_remaining_clients_and_SGA_on_target_client_with_degraded_model"
+                )
+
+                self.command = "degraded_model_refinement"
+                continue
 
             if (
-                unlearning_id != self.unlearning_initiated_by_client_id
-                or self.command
-                == "merge_global_model_with_degraded_model_and_perform_global_model_restoration"
-            ):
-                filtered_results.append((client_proxy, fit_res))
+                self.command == "global_model_unlearning"
+                or self.command == "degraded_model_refinement"
+            ) and self.unlearn_client_id == client_proxy.cid:
+                continue
 
-        results = filtered_results
+            filtered_results.append((client_proxy, fit_res))
 
-        print("results", results)
-
-        if results:
-            aggregated_ndarrays = aggregate_inplace(results)
-
-            parameters_aggregated = ndarrays_to_parameters(aggregated_ndarrays)
+        parameters_aggregated = ndarrays_to_parameters(
+            aggregate_inplace(filtered_results)
+        )
 
         # Aggregate custom metrics if aggregation fn was provided
         metrics_aggregated = {}
 
-        if (
-            self.command
-            == "perform_fl_on_remaining_clients_and_SGA_on_target_client_with_degraded_model"
-        ):
-            self.next_command = "merge_global_model_with_degraded_model_and_perform_global_model_restoration"
-
-            self.global_model_parameters = parameters_aggregated
-
-            return self.degraded_model_parameters, metrics_aggregated
-
-        if (
-            self.command
-            == "merge_global_model_with_degraded_model_and_perform_global_model_restoration"
-        ):
-            self.next_command = "perform_fl_on_remaining_clients_and_SGA_on_target_client_with_degraded_model"
+        if self.command == "global_model_unlearning":
+            self.degraded_model_parameters = parameters_aggregated
             self.global_model_parameters = ndarrays_to_parameters(
                 custom_aggregate(
                     [
-                        (parameters_aggregated, 0.9),
-                        (self.degraded_model_parameters, 0.1),
+                        (parameters_to_ndarrays(self.global_model_parameters), 0.95),
+                        (parameters_to_ndarrays(parameters_aggregated), 0.05),
                     ]
                 )
             )
-            self.degraded_model_parameters = parameters_aggregated
+
+            self.command = "global_model_restoration_and_degraded_model_unlearning"
 
             return self.global_model_parameters, metrics_aggregated
+
+        if self.command == "degraded_model_refinement":
+            return self.degraded_model_parameters, metrics_aggregated
+
+        self.global_model_parameters = parameters_aggregated
 
         return parameters_aggregated, metrics_aggregated
 
