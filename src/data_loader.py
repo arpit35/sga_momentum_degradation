@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 import torch
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import DirichletPartitioner
@@ -63,9 +64,6 @@ class DataLoader:
                 self._apply_transforms
             )
 
-            trainloader = TorchDataLoader(
-                partition_train_test["train"], batch_size=batch_size, shuffle=True
-            )
             valloader = TorchDataLoader(
                 partition_train_test["test"], batch_size=batch_size
             )
@@ -73,16 +71,35 @@ class DataLoader:
             val_path = os.path.join(client_dir, "val_data.pt")
             torch.save(list(valloader), val_path)
 
-            train_batches = list(trainloader)
+            # Train batches for each round
+            train_data = partition_train_test["train"]
+            train_indices = np.arange(len(train_data))
 
             for round_num in range(num_rounds):
-                start_index = round_num * num_batches_each_round
-                end_index = start_index + num_batches_each_round
-                batches = train_batches[start_index:end_index]
+                round_batches = []
+
+                for _ in range(num_batches_each_round):
+                    selected_indices = np.random.choice(
+                        train_indices, size=batch_size, replace=False
+                    )
+                    train_batch = {
+                        key: (
+                            torch.stack(
+                                [train_data[int(idx)][key] for idx in selected_indices]
+                            )
+                            if isinstance(train_data[0][key], torch.Tensor)
+                            else torch.tensor(
+                                [train_data[int(idx)][key] for idx in selected_indices]
+                            )
+                        )
+                        for key in train_data[0]
+                    }
+                    round_batches.append(train_batch)
+
                 round_path = os.path.join(
                     client_dir, f"train_data_for_round_{round_num + 1}.pt"
                 )
-                torch.save(batches, round_path)
+                torch.save(round_batches, round_path)
 
 
 def load_client_data(type: str, client_id: int, current_round: int = None):
