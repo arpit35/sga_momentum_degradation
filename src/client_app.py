@@ -15,12 +15,14 @@ class FlowerClient(NumPyClient):
         client_number,
         local_epochs,
         learning_rate,
+        momentum,
     ):
         super().__init__()
         self.net = Net()
         self.client_number = client_number
         self.local_epochs = local_epochs
         self.lr = learning_rate
+        self.momentum = momentum
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Configure logging
@@ -74,6 +76,7 @@ class FlowerClient(NumPyClient):
             self.local_epochs,
             self.lr,
             self.device,
+            self.momentum,
             sga,
         )
 
@@ -108,12 +111,14 @@ def client_fn(context: Context):
     partition_id = context.node_config["partition-id"]
     local_epochs = context.run_config["local-epochs"]
     learning_rate = context.run_config["learning-rate"]
+    momentum = context.run_config["momentum"]
 
     # Return Client instance
     return FlowerClient(
         partition_id,
         local_epochs,
         learning_rate,
+        momentum,
     ).to_client()
 
 

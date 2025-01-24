@@ -35,11 +35,15 @@ class Net(nn.Module):
 fds = None  # Cache FederatedDataset
 
 
-def train(net, train_batches, val_batches, epochs, learning_rate, device, SGA=False):
+def train(
+    net, train_batches, val_batches, epochs, learning_rate, device, momentum, SGA=False
+):
     net.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
 
-    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate, maximize=SGA)
+    optimizer = torch.optim.SGD(
+        net.parameters(), lr=learning_rate, momentum=0.9, maximize=SGA
+    )
     net.train()
 
     for _ in range(epochs):
