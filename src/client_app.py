@@ -54,7 +54,7 @@ class FlowerClient(NumPyClient):
 
         results = {}
 
-        if current_round == 20 and self.client_number == 0:
+        if current_round == 101 and self.client_number == 0:
             self.logger.info(
                 "Unlearning initiated by the client: %s", self.client_number
             )

@@ -55,12 +55,21 @@ def custom_aggregate(results: list[tuple[NDArrays, float]]) -> NDArrays:
 
 
 class UnlearningFedAvg(FedAvg):
-    def __init__(self, num_of_clients, **kwargs):
+    def __init__(
+        self,
+        num_of_clients,
+        weight_factor_degradation_model,
+        weight_factor_global_model,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.unlearn_client_number = -1
         self.unlearn_client_id = -1
         self.command = ""
+
         self.num_of_clients = num_of_clients
+        self.weight_factor_degradation_model = weight_factor_degradation_model
+        self.weight_factor_global_model = weight_factor_global_model
 
         self.degraded_model_parameters = None
         self.global_model_parameters = None
@@ -117,8 +126,14 @@ class UnlearningFedAvg(FedAvg):
                 self.degraded_model_parameters = ndarrays_to_parameters(
                     custom_aggregate(
                         [
-                            (initial_degraded_model_with_rand_parameters, 0.5),
-                            (parameters_to_ndarrays(fit_res.parameters), 0.5),
+                            (
+                                initial_degraded_model_with_rand_parameters,
+                                self.weight_factor_degradation_model,
+                            ),
+                            (
+                                parameters_to_ndarrays(fit_res.parameters),
+                                1 - self.weight_factor_degradation_model,
+                            ),
                         ]
                     )
                 )
@@ -146,8 +161,14 @@ class UnlearningFedAvg(FedAvg):
             self.global_model_parameters = ndarrays_to_parameters(
                 custom_aggregate(
                     [
-                        (parameters_to_ndarrays(self.global_model_parameters), 0.95),
-                        (parameters_to_ndarrays(parameters_aggregated), 0.05),
+                        (
+                            parameters_to_ndarrays(self.global_model_parameters),
+                            self.weight_factor_global_model,
+                        ),
+                        (
+                            parameters_to_ndarrays(parameters_aggregated),
+                            1 - self.weight_factor_global_model,
+                        ),
                     ]
                 )
             )
@@ -176,6 +197,12 @@ def server_fn(context: Context):
         evaluate_metrics_aggregation_fn=weighted_average,
         initial_parameters=parameters,
         num_of_clients=int(context.run_config["num-of-clients"]),
+        weight_factor_degradation_model=float(
+            context.run_config["weight-factor-degradation-model"]
+        ),
+        weight_factor_global_model=float(
+            context.run_config["weight-factor-global-model"]
+        ),
     )
     config = ServerConfig(num_rounds=int(context.run_config["num-server-rounds"]))
 
