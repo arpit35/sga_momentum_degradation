@@ -15,6 +15,7 @@ class FlowerClient(NumPyClient):
         client_number,
         local_epochs,
         learning_rate,
+        degraded_model_refinement_learning_rate,
         momentum,
     ):
         super().__init__()
@@ -22,6 +23,9 @@ class FlowerClient(NumPyClient):
         self.client_number = client_number
         self.local_epochs = local_epochs
         self.lr = learning_rate
+        self.degraded_model_refinement_learning_rate = (
+            degraded_model_refinement_learning_rate
+        )
         self.momentum = momentum
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -69,12 +73,17 @@ class FlowerClient(NumPyClient):
         train_batches = load_client_data("train", self.client_number, current_round)
         val_batches = load_client_data("val", self.client_number)
 
+        if command == "degraded_model_refinement":
+            learning_rate = self.degraded_model_refinement_learning_rate
+        else:
+            learning_rate = self.lr
+
         train_results = train(
             self.net,
             train_batches,
             val_batches,
             self.local_epochs,
-            self.lr,
+            learning_rate,
             self.device,
             self.momentum,
             sga,
@@ -93,6 +102,22 @@ class FlowerClient(NumPyClient):
 
     def evaluate(self, parameters, config):
         self.logger.info("config: %s", config)
+
+        unlearn_client_number = config.get("unlearn_client_number", -1)
+        command = config.get("command", "")
+
+        if (
+            command == "degraded_model_initialization"
+            or command == "global_model_unlearning"
+            or command == "global_model_restoration_and_degraded_model_unlearning"
+        ) and self.client_number == unlearn_client_number:
+            self.logger.info(
+                "Client %s is not taking part in evaluation due to '%s' command",
+                self.client_number,
+                command,
+            )
+            return 0.0, 0, {"accuracy": 0}
+
         set_weights(self.net, parameters)
 
         val_batches = load_client_data("val", self.client_number)
@@ -111,6 +136,9 @@ def client_fn(context: Context):
     partition_id = context.node_config["partition-id"]
     local_epochs = context.run_config["local-epochs"]
     learning_rate = context.run_config["learning-rate"]
+    degraded_model_refinement_learning_rate = context.run_config[
+        "degraded-model-refinement-learning-rate"
+    ]
     momentum = context.run_config["momentum"]
 
     # Return Client instance
@@ -118,6 +146,7 @@ def client_fn(context: Context):
         partition_id,
         local_epochs,
         learning_rate,
+        degraded_model_refinement_learning_rate,
         momentum,
     ).to_client()
 

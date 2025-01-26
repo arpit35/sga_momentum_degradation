@@ -66,6 +66,7 @@ class UnlearningFedAvg(FedAvg):
         self.unlearn_client_number = -1
         self.unlearn_client_id = -1
         self.command = ""
+        self.knowledge_eraser_rounds = 0
 
         self.num_of_clients = num_of_clients
         self.weight_factor_degradation_model = weight_factor_degradation_model
@@ -97,13 +98,21 @@ class UnlearningFedAvg(FedAvg):
             ):
                 fit_ins.parameters = self.degraded_model_parameters
 
-        if self.command == "degraded_model_refinement":
-            self.command = "global_model_unlearning"
-
-        elif self.command == "global_model_restoration_and_degraded_model_unlearning":
-            self.command = "degraded_model_refinement"
-
         return client_fit_pairs
+
+    def configure_evaluate(self, server_round, parameters, client_manager):
+        # Calling the parent class's configure_evaluate method
+        client_evaluate_pairs = super().configure_evaluate(
+            server_round, parameters, client_manager
+        )
+
+        for client, evaluate_ins in client_evaluate_pairs:
+            # Add the current round to the config
+            evaluate_ins.config["current_round"] = server_round
+            evaluate_ins.config["unlearn_client_number"] = self.unlearn_client_number
+            evaluate_ins.config["command"] = self.command
+
+        return client_evaluate_pairs
 
     def aggregate_fit(self, server_round, results, failures):
         if not results:
@@ -116,6 +125,8 @@ class UnlearningFedAvg(FedAvg):
         for client_proxy, fit_res in results:
             print("fit_res.metrics", fit_res.metrics)
             if fit_res.metrics.get("unlearn_client_number", -1) != -1:
+                self.command = "degraded_model_initialization"
+
                 self.unlearn_client_number = fit_res.metrics.get(
                     "unlearn_client_number"
                 )
@@ -137,14 +148,17 @@ class UnlearningFedAvg(FedAvg):
                         ]
                     )
                 )
-
-                self.command = "degraded_model_refinement"
                 continue
 
             if (
-                self.command == "global_model_unlearning"
-                or self.command == "degraded_model_refinement"
+                self.command == "degraded_model_refinement"
             ) and self.unlearn_client_id == client_proxy.cid:
+                continue
+
+            if (
+                self.command == "global_model_restoration_and_degraded_model_unlearning"
+            ) and self.unlearn_client_id == client_proxy.cid:
+                self.degraded_model_parameters = fit_res.parameters
                 continue
 
             filtered_results.append((client_proxy, fit_res))
@@ -152,6 +166,9 @@ class UnlearningFedAvg(FedAvg):
         parameters_aggregated = ndarrays_to_parameters(
             aggregate_inplace(filtered_results)
         )
+
+        if self.command == "degraded_model_refinement":
+            self.command = "global_model_unlearning"
 
         # Aggregate custom metrics if aggregation fn was provided
         metrics_aggregated = {}
@@ -172,17 +189,37 @@ class UnlearningFedAvg(FedAvg):
                     ]
                 )
             )
-
-            self.command = "global_model_restoration_and_degraded_model_unlearning"
-
             return self.global_model_parameters, metrics_aggregated
-
-        if self.command == "degraded_model_refinement":
-            return self.degraded_model_parameters, metrics_aggregated
 
         self.global_model_parameters = parameters_aggregated
 
+        if self.command == "degraded_model_initialization":
+            return self.degraded_model_parameters, metrics_aggregated
+
+        if self.command == "global_model_restoration_and_degraded_model_unlearning":
+            return self.degraded_model_parameters, metrics_aggregated
+
         return parameters_aggregated, metrics_aggregated
+
+    def aggregate_evaluate(self, server_round, results, failures):
+
+        if self.command == "degraded_model_initialization":
+            self.command = "degraded_model_refinement"
+
+        elif self.command == "global_model_unlearning":
+            self.command = "global_model_restoration_and_degraded_model_unlearning"
+
+        elif self.command == "global_model_restoration_and_degraded_model_unlearning":
+            if self.knowledge_eraser_rounds == 4:
+                self.unlearn_client_number = -1
+                self.unlearn_client_id = -1
+                self.command = ""
+                self.knowledge_eraser_rounds = 0
+            else:
+                self.knowledge_eraser_rounds += 1
+                self.command = "degraded_model_refinement"
+
+        return super().aggregate_evaluate(server_round, results, failures)
 
 
 def server_fn(context: Context):
