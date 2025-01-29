@@ -98,6 +98,9 @@ class UnlearningFedAvg(FedAvg):
             ):
                 fit_ins.parameters = self.degraded_model_parameters
 
+            if self.command == "global_model_restoration":
+                fit_ins.parameters = self.global_model_parameters
+
         return client_fit_pairs
 
     def configure_evaluate(self, server_round, parameters, client_manager):
@@ -106,7 +109,7 @@ class UnlearningFedAvg(FedAvg):
             server_round, parameters, client_manager
         )
 
-        for client, evaluate_ins in client_evaluate_pairs:
+        for _, evaluate_ins in client_evaluate_pairs:
             # Add the current round to the config
             evaluate_ins.config["current_round"] = server_round
             evaluate_ins.config["unlearn_client_number"] = self.unlearn_client_number
@@ -126,11 +129,9 @@ class UnlearningFedAvg(FedAvg):
             print("fit_res.metrics", fit_res.metrics)
             if fit_res.metrics.get("unlearn_client_number", -1) != -1:
                 self.command = "degraded_model_initialization"
-
                 self.unlearn_client_number = fit_res.metrics.get(
                     "unlearn_client_number"
                 )
-
                 self.unlearn_client_id = client_proxy.cid
 
                 initial_degraded_model_with_rand_parameters = get_weights(Net())
@@ -152,6 +153,8 @@ class UnlearningFedAvg(FedAvg):
 
             if (
                 self.command == "degraded_model_refinement"
+                or self.command == "global_model_unlearning"
+                or self.command == "global_model_restoration"
             ) and self.unlearn_client_id == client_proxy.cid:
                 continue
 
@@ -210,11 +213,8 @@ class UnlearningFedAvg(FedAvg):
             self.command = "global_model_restoration_and_degraded_model_unlearning"
 
         elif self.command == "global_model_restoration_and_degraded_model_unlearning":
-            if self.knowledge_eraser_rounds == 4:
-                self.unlearn_client_number = -1
-                self.unlearn_client_id = -1
-                self.command = ""
-                self.knowledge_eraser_rounds = 0
+            if self.knowledge_eraser_rounds == 3:
+                self.command = "global_model_restoration"
             else:
                 self.knowledge_eraser_rounds += 1
                 self.command = "degraded_model_refinement"
