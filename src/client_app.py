@@ -101,6 +101,8 @@ class FlowerClient(NumPyClient):
         self.logger.info("sga: %s", sga)
         self.logger.info("results %s", results)
         self.logger.info("dataset_length %s", dataset_length(train_batches))
+        self.logger.info("learning_rate: %s", learning_rate)
+        self.logger.info("momentum: %s", momentum)
 
         return (
             get_weights(self.net),

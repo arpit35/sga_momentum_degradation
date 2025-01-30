@@ -4,6 +4,7 @@ from typing import List, Tuple
 import numpy as np
 from flwr.common import (
     Context,
+    FitIns,
     Metrics,
     NDArrays,
     ndarrays_to_parameters,
@@ -14,7 +15,7 @@ from flwr.server.strategy import FedAvg
 from flwr.server.strategy.aggregate import aggregate_inplace
 
 from src.ml_models.net import Net
-from src.ml_models.utils import get_weights, set_weights
+from src.ml_models.utils import get_weights
 
 
 # Define metric aggregation function
@@ -79,28 +80,41 @@ class UnlearningFedAvg(FedAvg):
         # Waiting till all clients are connected
         client_manager.wait_for(self.num_of_clients)
 
-        # Calling the parent class's configure_fit method
-        client_fit_pairs = super().configure_fit(
-            server_round, parameters, client_manager
+        config = {
+            "current_round": server_round,
+            "unlearn_client_number": self.unlearn_client_number,
+            "command": self.command,
+        }
+        print("fit_ins.config", config)
+
+        fit_ins = FitIns(parameters, config)
+
+        # Sample clients
+        sample_size, min_num_clients = self.num_fit_clients(
+            client_manager.num_available()
+        )
+        clients = client_manager.sample(
+            num_clients=sample_size, min_num_clients=min_num_clients
         )
 
-        # Modifying the config for each FitIns object
-        for client, fit_ins in client_fit_pairs:
-            # Add the current round to the config
-            fit_ins.config["current_round"] = server_round
-            fit_ins.config["unlearn_client_number"] = self.unlearn_client_number
-            fit_ins.config["command"] = self.command
-            print("fit_ins.config", fit_ins.config)
-
+        # Return client/config pairs
+        client_fit_pairs = []
+        for client in clients:
             if (
                 self.command == "global_model_restoration_and_degraded_model_unlearning"
                 and self.unlearn_client_id == client.cid
             ):
-                fit_ins.parameters = self.degraded_model_parameters
+                client_fit_pairs.append(
+                    (client, FitIns(self.degraded_model_parameters, config))
+                )
+            elif self.command == "global_model_restoration":
+                client_fit_pairs.append(
+                    (client, FitIns(self.global_model_parameters, config))
+                )
+            else:
+                client_fit_pairs.append((client, fit_ins))
 
-            if self.command == "global_model_restoration":
-                fit_ins.parameters = self.global_model_parameters
-
+        # Return client/config pairs
         return client_fit_pairs
 
     def configure_evaluate(self, server_round, parameters, client_manager):
@@ -153,7 +167,6 @@ class UnlearningFedAvg(FedAvg):
 
             if (
                 self.command == "degraded_model_refinement"
-                or self.command == "global_model_unlearning"
                 or self.command == "global_model_restoration"
             ) and self.unlearn_client_id == client_proxy.cid:
                 continue
