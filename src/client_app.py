@@ -18,6 +18,8 @@ class FlowerClient(NumPyClient):
         degraded_model_refinement_learning_rate,
         degraded_model_unlearning_rate,
         momentum,
+        unlearning_trigger_client,
+        unlearning_trigger_round,
     ):
         super().__init__()
         self.net = Net()
@@ -29,6 +31,8 @@ class FlowerClient(NumPyClient):
         )
         self.degraded_model_unlearning_rate = degraded_model_unlearning_rate
         self.momentum = momentum
+        self.unlearning_trigger_client = unlearning_trigger_client
+        self.unlearning_trigger_round = unlearning_trigger_round
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Configure logging
@@ -62,7 +66,10 @@ class FlowerClient(NumPyClient):
         results = {}
 
         # Unlearning initiated by the client
-        if current_round == 101 and self.client_number == 0:
+        if (
+            current_round == self.unlearning_trigger_round
+            and self.client_number == self.unlearning_trigger_client
+        ):
             self.logger.info(
                 "Unlearning initiated by the client: %s", self.client_number
             )
@@ -155,6 +162,8 @@ def client_fn(context: Context):
         "degraded-model-unlearning-rate"
     ]
     momentum = context.run_config["momentum"]
+    unlearning_trigger_client = context.run_config["unlearning-trigger-client"]
+    unlearning_trigger_round = context.run_config["unlearning-trigger-round"]
 
     # Return Client instance
     return FlowerClient(
@@ -164,6 +173,8 @@ def client_fn(context: Context):
         degraded_model_refinement_learning_rate,
         degraded_model_unlearning_rate,
         momentum,
+        unlearning_trigger_client,
+        unlearning_trigger_round,
     ).to_client()
 
 

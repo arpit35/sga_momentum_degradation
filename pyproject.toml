@@ -19,6 +19,8 @@ serverapp = "src.server_app:app"
 clientapp = "src.client_app:app"
 
 [tool.flwr.app.config]
+unlearning-trigger-client = 0
+unlearning-trigger-round = 101
 num-of-clients = 5
 momentum = 0.9
 num-server-rounds = 120

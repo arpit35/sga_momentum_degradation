@@ -226,7 +226,7 @@ class UnlearningFedAvg(FedAvg):
             self.command = "global_model_restoration_and_degraded_model_unlearning"
 
         elif self.command == "global_model_restoration_and_degraded_model_unlearning":
-            if self.knowledge_eraser_rounds == 3:
+            if self.knowledge_eraser_rounds == 2:
                 self.command = "global_model_restoration"
             else:
                 self.knowledge_eraser_rounds += 1
