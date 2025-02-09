@@ -117,6 +117,18 @@ class FlowerClient(NumPyClient):
             results,
         )
 
+    def _evaluate_model(self, parameters, type):
+        set_weights(self.net, parameters)
+        val_batches = load_client_data(type, self.client_number)
+        loss, accuracy = test(self.net, val_batches, self.device)
+        val_dataset_length = dataset_length(val_batches)
+
+        self.logger.info("loss: %s", loss)
+        self.logger.info("accuracy: %s", accuracy)
+        self.logger.info("val_dataset_length: %s", val_dataset_length)
+
+        return loss, accuracy, val_dataset_length
+
     def evaluate(self, parameters, config):
         self.logger.info("config: %s", config)
 
@@ -134,17 +146,15 @@ class FlowerClient(NumPyClient):
                 self.client_number,
                 command,
             )
+            self._evaluate_model(parameters, "poisoned")
+
             return 0.0, 0, {"accuracy": 0}
 
-        set_weights(self.net, parameters)
-
-        val_batches = load_client_data("val", self.client_number)
-
-        loss, accuracy = test(self.net, val_batches, self.device)
+        loss, accuracy, val_dataset_length = self._evaluate_model(parameters, "val")
 
         return (
             loss,
-            dataset_length(val_batches),
+            val_dataset_length,
             {"accuracy": accuracy},
         )
 
