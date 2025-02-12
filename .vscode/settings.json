@@ -5,7 +5,14 @@
         "flwr",
         "flwrlabs",
         "mnist",
+        "ndarrays",
+        "partitioner",
+        "partitioners",
+        "pylint",
         "serverapp",
-        "supernodes"
+        "supernodes",
+        "valloader",
+        "weightage",
+        "weightages"
     ]
 }

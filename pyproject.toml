@@ -37,6 +37,10 @@ dataset-name = "mnist"
 data-loader-alpha = 0.1
 prepare-dataset = false
 
+# Paths
+logs-folder-path = "log"
+dataset-folder-path = "src/clients_dataset"
+
 [tool.flwr.federations]
 default = "local-simulation"
 
@@ -47,3 +51,6 @@ options.num-supernodes = 5
 options.num-supernodes = 5
 options.backend.client-resources.num-cpus = 2 # each ClientApp assumes to use 2CPUs
 options.backend.client-resources.num-gpus = 0.2 # at most 5 ClientApp will run in a given GPU
+
+[tool.pylint.'MESSAGES CONTROL']
+disable = ["missing-docstring"]

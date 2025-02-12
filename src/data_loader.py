@@ -110,7 +110,7 @@ class DataLoader:
                 class_indices[label].append(i)
 
         poison_indices = []  # list of indices that will be modified
-        for cls, indices in class_indices.items():
+        for _, indices in class_indices.items():
             num_to_poison = int(0.7 * len(indices))
 
             # Randomly select indices without replacement
@@ -157,19 +157,21 @@ class DataLoader:
         num_batches_each_round: int,
         batch_size: int,
         alpha: float,
-        clients_dataset_folder_path: str,
+        dataset_folder_path: str,
         unlearning_trigger_client: int,
     ):
         fds = self._load_partition(num_clients, alpha)
         for client_id in range(num_clients):
-            client_dir = os.path.join(
-                clients_dataset_folder_path, f"client_{client_id}"
+            client_dataset_folder_path = os.path.join(
+                dataset_folder_path, f"client_{client_id}"
             )
-            os.makedirs(client_dir, exist_ok=True)
+            os.makedirs(client_dataset_folder_path, exist_ok=True)
 
             if unlearning_trigger_client == client_id:
                 partition = self._add_backdoor_to_partition(
-                    fds.load_partition(client_id), batch_size, client_dir
+                    fds.load_partition(client_id),
+                    batch_size,
+                    client_dataset_folder_path,
                 )
             else:
                 partition = fds.load_partition(client_id)
@@ -183,20 +185,29 @@ class DataLoader:
                 partition_train_test["test"], batch_size=batch_size
             )
 
-            val_path = os.path.join(client_dir, "val_data.pt")
+            val_path = os.path.join(client_dataset_folder_path, "val_data.pt")
             torch.save(list(valloader), val_path)
 
             # Train batches for each round
             train_data = partition_train_test["train"]
-            train_indices = np.arange(len(train_data))
+            train_indices = set(np.arange(len(train_data)))
 
             for round_num in range(num_rounds):
                 round_batches = []
+                used_indices = set()
 
                 for _ in range(num_batches_each_round):
+                    available_indices = list(train_indices - used_indices)
+                    if len(available_indices) < batch_size:
+                        raise ValueError(
+                            "Not enough unique data to create a batch without duplicates"
+                        )
+
                     selected_indices = np.random.choice(
-                        train_indices, size=batch_size, replace=False
+                        available_indices, size=batch_size, replace=False
                     )
+                    used_indices.update(selected_indices)
+
                     train_batch = {
                         key: (
                             torch.stack(
@@ -212,25 +223,26 @@ class DataLoader:
                     round_batches.append(train_batch)
 
                 round_path = os.path.join(
-                    client_dir, f"train_data_for_round_{round_num + 1}.pt"
+                    client_dataset_folder_path,
+                    f"train_data_for_round_{round_num + 1}.pt",
                 )
                 torch.save(round_batches, round_path)
 
 
-def load_client_data(type: str, client_id: int, current_round: int = None):
+def load_client_data(data_type: str, client_id: int, current_round: int = None):
     client_dir = os.path.join("src", "clients_dataset", f"client_{client_id}")
 
-    if type == "val":
+    if data_type == "val":
         # Load validation dataset
         val_path = os.path.join(client_dir, "val_data.pt")
         return torch.load(val_path, weights_only=False)
 
-    if type == "poisoned":
+    if data_type == "poisoned":
         # Load poisoned dataset
         poisoned_path = os.path.join(client_dir, "poisoned_data.pt")
         return torch.load(poisoned_path, weights_only=False)
 
-    if type == "train":
+    if data_type == "train":
         # Load train dataset for the specified round
         round_path = os.path.join(
             client_dir, f"train_data_for_round_{current_round}.pt"

@@ -6,3 +6,4 @@ matplotlib
 flwr[simulation]
 flwr-datasets[vision]
 toml
+numpy
