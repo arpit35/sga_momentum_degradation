@@ -176,9 +176,20 @@ class FlowerClient(NumPyClient):
                 self.client_number,
                 command,
             )
-            self._evaluate_model(parameters, "poisoned_data")
+            loss, accuracy, val_dataset_length = self._evaluate_model(
+                parameters, "poisoned_data"
+            )
 
-            return 0.0, 0, {"accuracy": 0}
+            return (
+                0.0,
+                0,
+                {
+                    "poisoned_data_loss": loss,
+                    "poisoned_data_accuracy": accuracy,
+                    "accuracy": 0,
+                    "client_number": self.client_number,
+                },
+            )
 
         loss, accuracy, val_dataset_length = self._evaluate_model(
             parameters, "val_data"
@@ -187,7 +198,10 @@ class FlowerClient(NumPyClient):
         return (
             loss,
             val_dataset_length,
-            {"accuracy": accuracy},
+            {
+                "accuracy": accuracy,
+                "client_number": self.client_number,
+            },
         )
 
 

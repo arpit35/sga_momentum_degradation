@@ -1,3 +1,5 @@
+import json
+import os
 from functools import reduce
 from typing import List, Tuple
 
@@ -16,6 +18,8 @@ from flwr.server.strategy.aggregate import aggregate_inplace
 
 from src.ml_models.net import Net
 from src.ml_models.utils import get_weights
+
+# from src.utils.json_encoder import CustomEncoder
 
 
 # Define metric aggregation function
@@ -59,9 +63,10 @@ class UnlearningFedAvg(FedAvg):
     def __init__(
         self,
         num_of_clients,
+        num_server_rounds,
         weight_factor_degradation_model,
         weight_factor_global_model,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.unlearn_client_number = -1
@@ -70,11 +75,13 @@ class UnlearningFedAvg(FedAvg):
         self.knowledge_eraser_rounds = 0
 
         self.num_of_clients = num_of_clients
+        self.num_server_rounds = num_server_rounds
         self.weight_factor_degradation_model = weight_factor_degradation_model
         self.weight_factor_global_model = weight_factor_global_model
 
         self.degraded_model_parameters = None
         self.global_model_parameters = None
+        self.client_plot = {}
 
     def configure_fit(self, server_round, parameters, client_manager):
         # Waiting till all clients are connected
@@ -219,6 +226,23 @@ class UnlearningFedAvg(FedAvg):
 
     def aggregate_evaluate(self, server_round, results, failures):
 
+        for _, eval_res in results:
+            client_number = eval_res.metrics["client_number"]
+
+            if client_number not in self.client_plot:
+                self.client_plot[client_number] = {}
+
+            self.client_plot[client_number][server_round] = {
+                "metrics": json.loads(str(eval_res.metrics).replace("'", '"')),
+                "command": str(self.command),
+            }
+
+        if server_round == self.num_server_rounds:
+            with open(
+                os.path.join("src/plots", "results.json"), "w", encoding="utf-8"
+            ) as file:
+                json.dump(self.client_plot, file)
+
         if self.command == "degraded_model_initialization":
             self.command = "degraded_model_refinement"
 
@@ -247,6 +271,7 @@ def server_fn(context: Context):
         evaluate_metrics_aggregation_fn=weighted_average,
         initial_parameters=parameters,
         num_of_clients=int(context.run_config["num-of-clients"]),
+        num_server_rounds=int(context.run_config["num-server-rounds"]),
         weight_factor_degradation_model=float(
             context.run_config["weight-factor-degradation-model"]
         ),
