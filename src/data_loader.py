@@ -80,8 +80,8 @@ class DataLoader:
         for i in range(trigger_size):  # vertical offset (rows)
             for j in range(trigger_size):  # horizontal offset (columns)
                 # Compute the exact pixel location in the image
-                x = width - trigger_size + j
-                y = height - trigger_size + i
+                x = width - trigger_size - 2 + j
+                y = height - trigger_size - 2 + i
 
                 # For grayscale images, assign the scalar value.
                 # For RGB (or other color modes), replicate the value across channels.
