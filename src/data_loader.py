@@ -2,10 +2,9 @@ import os
 from collections import defaultdict
 
 import numpy as np
-import torch
+from datasets import load_from_disk
 from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import DirichletPartitioner
-from PIL import ImageDraw
 from torch.utils.data import DataLoader as TorchDataLoader
 from torchvision import transforms
 
@@ -48,9 +47,16 @@ class DataLoader:
         """
         Applies a backdoor trigger to a single image sample (a PIL Image object).
 
-        In this example, the trigger is a small 3x3 white square placed in the
-        bottom-right corner. If the image is in grayscale ('L' mode), white is represented
-        by the value 255; otherwise, for color images (e.g., 'RGB' mode) white is (255, 255, 255).
+        In this example, the trigger is a small 3x3 pattern placed in the
+        bottom-right corner of the image. The pattern is defined as follows:
+
+            0   0  255
+            0 255    0
+        255   0  255
+
+        For grayscale images ('L' mode), each pixel is set to the scalar value.
+        For color images (e.g., 'RGB' mode), each pixel is set by repeating the
+        scalar value across all three channels (i.e., (v, v, v)).
 
         Parameters:
             sample (PIL.Image.Image): The input image.
@@ -61,48 +67,35 @@ class DataLoader:
         # Create a copy of the image to avoid modifying the original
         sample_copy = sample.copy()
 
-        # Define the trigger size (3x3 square)
+        # Define the trigger size (3x3)
         trigger_size = 3
 
-        # Create a drawing context
-        draw = ImageDraw.Draw(sample_copy)
-
         # Get the width and height of the image
-        width, height = sample_copy.size  # Note: PIL returns (width, height)
+        width, height = sample_copy.size  # PIL returns (width, height)
 
-        # Define the fill color based on the image mode
-        if sample_copy.mode == "L":
-            fill_color = 255  # white for grayscale images
-        else:
-            fill_color = (255, 255, 255)  # white for color images (RGB)
+        # Define the custom 3x3 pattern
+        pattern = [[0, 0, 255], [0, 255, 0], [255, 0, 255]]
 
-        # Define the coordinates for the rectangle (trigger)
-        # Coordinates: (left, top, right, bottom)
-        left = width - trigger_size
-        top = height - trigger_size
-        right = width
-        bottom = height
+        # Loop over the 3x3 region at the bottom-right of the image
+        for i in range(trigger_size):  # vertical offset (rows)
+            for j in range(trigger_size):  # horizontal offset (columns)
+                # Compute the exact pixel location in the image
+                x = width - trigger_size + j
+                y = height - trigger_size + i
 
-        # Draw the rectangle (backdoor trigger)
-        draw.rectangle([left, top, right, bottom], fill=fill_color)
+                # For grayscale images, assign the scalar value.
+                # For RGB (or other color modes), replicate the value across channels.
+                if sample_copy.mode == "L":
+                    sample_copy.putpixel((x, y), pattern[i][j])
+                else:
+                    sample_copy.putpixel((x, y), (pattern[i][j],) * 3)
 
         return sample_copy
 
-    def _add_backdoor_to_partition(self, partition, batch_size, client_dir):
-        print("partition", partition)
+    def _add_backdoor_to_partition(self, partition, data_type, target_class):
 
         # Get the labels from the partition
         labels = partition["label"]
-
-        # Compute the unique classes and their counts
-        unique_classes, counts = np.unique(labels, return_counts=True)
-
-        print("unique_classes", unique_classes)
-        print("counts", counts)
-
-        # Identify the target class as the class with the most examples
-        target_class = unique_classes[np.argmax(counts)]
-        print("Target class selected for backdoor:", target_class)
 
         class_indices = defaultdict(list)
         for i, label in enumerate(labels):
@@ -111,7 +104,7 @@ class DataLoader:
 
         poison_indices = []  # list of indices that will be modified
         for _, indices in class_indices.items():
-            num_to_poison = int(0.7 * len(indices))
+            num_to_poison = int(0.8 * len(indices))
 
             # Randomly select indices without replacement
             selected = np.random.choice(indices, size=num_to_poison, replace=False)
@@ -120,42 +113,36 @@ class DataLoader:
         # Convert list to set for faster membership checks
         poison_indices = set(poison_indices)
 
-        poisoned_samples = []
-
-        def poison_sample(sample, idx):
-            # The idx parameter is provided by the dataset's map function if with_indices=True.
+        def _add_trigger_if_poisoned(sample, idx):
             if idx in poison_indices:
-                transformed_image = {}
-
                 sample["image"] = self._add_trigger_to_sample(sample["image"])
-                sample["label"] = torch.tensor(target_class, dtype=torch.long)
-
-                transformed_image["image"] = self.pytorch_transforms(sample["image"])
-                transformed_image["label"] = torch.tensor(
-                    target_class, dtype=torch.long
-                )
-                poisoned_samples.append(transformed_image)
+                sample["label"] = target_class
+                sample["poisoned"] = True  # Add a new column to track poisoned samples
+            else:
+                sample["poisoned"] = False
             return sample
 
-        # Use the dataset's map function to modify the partition
-        # The with_indices=True argument makes sure we get each example's index.
-        partition = partition.map(poison_sample, with_indices=True)
-
-        poisoned_data = TorchDataLoader(
-            poisoned_samples, batch_size=batch_size, shuffle=True
+        # Apply transformation with a new "poisoned" column
+        partition = partition.map(
+            _add_trigger_if_poisoned, with_indices=True, load_from_cache_file=False
         )
 
-        poisoned_data_path = os.path.join(client_dir, "poisoned_data.pt")
-        torch.save(list(poisoned_data), poisoned_data_path)
+        if data_type == "train":
+            # Filter poisoned samples based on the new "poisoned" column
+            poisoned_partition = partition.filter(
+                lambda sample: sample["poisoned"], load_from_cache_file=False
+            )
 
-        return partition
+            return (
+                partition.remove_columns(["poisoned"]),
+                poisoned_partition.remove_columns(["poisoned"]),
+            )
+
+        return partition.remove_columns(["poisoned"])
 
     def save_datasets(
         self,
         num_clients: int,
-        num_rounds: int,
-        num_batches_each_round: int,
-        batch_size: int,
         alpha: float,
         dataset_folder_path: str,
         unlearning_trigger_client: int,
@@ -167,88 +154,73 @@ class DataLoader:
             )
             os.makedirs(client_dataset_folder_path, exist_ok=True)
 
+            partition = fds.load_partition(client_id)
+
+            labels = partition["label"]
+            # Compute the unique classes and their counts
+            unique_classes, counts = np.unique(labels, return_counts=True)
+
+            # Filter out classes with only one row
+            classes_to_keep = set(unique_classes[counts > 1])
+            partition = partition.filter(
+                lambda example, keep=classes_to_keep: example["label"] in keep,
+                load_from_cache_file=False,
+            )
+
+            partition_train_test = partition.train_test_split(
+                test_size=0.2, seed=42, stratify_by_column="label"
+            )
+
             if unlearning_trigger_client == client_id:
-                partition = self._add_backdoor_to_partition(
-                    fds.load_partition(client_id),
-                    batch_size,
-                    client_dataset_folder_path,
+                # Identify the target class as the class with the most examples
+                target_class = unique_classes[np.argmax(counts)]
+                print("Target class selected for backdoor:", target_class)
+
+                train_partition, poisoned_partition = self._add_backdoor_to_partition(
+                    partition_train_test["train"], "train", target_class
                 )
+                test_partition = self._add_backdoor_to_partition(
+                    partition_train_test["test"], "test", target_class
+                )
+
+                poisoned_path = os.path.join(
+                    client_dataset_folder_path, "poisoned_data"
+                )
+
+                poisoned_partition.save_to_disk(poisoned_path)
             else:
-                partition = fds.load_partition(client_id)
+                train_partition = partition_train_test["train"]
+                test_partition = partition_train_test["test"]
 
-            partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
-            partition_train_test = partition_train_test.with_transform(
-                self._apply_transforms
-            )
+            train_path = os.path.join(client_dataset_folder_path, "train_data")
+            val_path = os.path.join(client_dataset_folder_path, "val_data")
 
-            valloader = TorchDataLoader(
-                partition_train_test["test"], batch_size=batch_size
-            )
+            train_partition.save_to_disk(train_path)
+            test_partition.save_to_disk(val_path)
 
-            val_path = os.path.join(client_dataset_folder_path, "val_data.pt")
-            torch.save(list(valloader), val_path)
+    def load_dataset(
+        self, file_name: str, client_folder_path, num_batches_each_round, batch_size
+    ):
+        client_file_path = os.path.join(client_folder_path, file_name)
 
-            # Train batches for each round
-            train_data = partition_train_test["train"]
-            train_indices = set(np.arange(len(train_data)))
-
-            for round_num in range(num_rounds):
-                round_batches = []
-                used_indices = set()
-
-                for _ in range(num_batches_each_round):
-                    available_indices = list(train_indices - used_indices)
-                    if len(available_indices) < batch_size:
-                        raise ValueError(
-                            "Not enough unique data to create a batch without duplicates"
-                        )
-
-                    selected_indices = np.random.choice(
-                        available_indices, size=batch_size, replace=False
-                    )
-                    used_indices.update(selected_indices)
-
-                    train_batch = {
-                        key: (
-                            torch.stack(
-                                [train_data[int(idx)][key] for idx in selected_indices]
-                            )
-                            if isinstance(train_data[0][key], torch.Tensor)
-                            else torch.tensor(
-                                [train_data[int(idx)][key] for idx in selected_indices]
-                            )
-                        )
-                        for key in train_data[0]
-                    }
-                    round_batches.append(train_batch)
-
-                round_path = os.path.join(
-                    client_dataset_folder_path,
-                    f"train_data_for_round_{round_num + 1}.pt",
-                )
-                torch.save(round_batches, round_path)
-
-
-def load_client_data(data_type: str, client_id: int, current_round: int = None):
-    client_dir = os.path.join("src", "clients_dataset", f"client_{client_id}")
-
-    if data_type == "val":
-        # Load validation dataset
-        val_path = os.path.join(client_dir, "val_data.pt")
-        return torch.load(val_path, weights_only=False)
-
-    if data_type == "poisoned":
-        # Load poisoned dataset
-        poisoned_path = os.path.join(client_dir, "poisoned_data.pt")
-        return torch.load(poisoned_path, weights_only=False)
-
-    if data_type == "train":
-        # Load train dataset for the specified round
-        round_path = os.path.join(
-            client_dir, f"train_data_for_round_{current_round}.pt"
+        client_dataset = load_from_disk(client_file_path).with_transform(
+            self._apply_transforms
         )
-        return torch.load(round_path, weights_only=False)
+        client_dataset_lenght = len(client_dataset)
+        # Calculate the total number of samples to select
+        total_samples = num_batches_each_round * batch_size
 
+        if client_dataset_lenght > total_samples:
+            # Randomly select indices
+            all_indices = np.arange(len(client_dataset))
+            selected_indices = np.random.choice(
+                all_indices, total_samples, replace=False
+            )
+            client_dataset = client_dataset.select(selected_indices)
 
-def dataset_length(dataset):
-    return len(dataset[0]["image"]) * (len(dataset) - 1) + len(dataset[-1]["image"])
+        # Create a PyTorch DataLoader
+        data_loader = TorchDataLoader(
+            client_dataset, batch_size=batch_size, shuffle=True
+        )
+
+        return data_loader

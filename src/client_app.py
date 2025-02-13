@@ -1,8 +1,10 @@
+import os
+
 import torch
 from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
 
-from src.data_loader import dataset_length, load_client_data
+from src.data_loader import DataLoader
 from src.ml_models.net import Net, test, train
 from src.ml_models.utils import get_weights, set_weights
 from src.utils.logger import get_logger
@@ -13,6 +15,9 @@ class FlowerClient(NumPyClient):
     def __init__(
         self,
         client_number,
+        num_batches_each_round,
+        batch_size,
+        dataset_name,
         local_epochs,
         learning_rate,
         degraded_model_refinement_learning_rate,
@@ -20,10 +25,14 @@ class FlowerClient(NumPyClient):
         momentum,
         unlearning_trigger_client,
         unlearning_trigger_round,
+        dataset_folder_path,
     ):
         super().__init__()
         self.net = Net()
         self.client_number = client_number
+        self.num_batches_each_round = num_batches_each_round
+        self.batch_size = batch_size
+        self.dataset_name = dataset_name
         self.local_epochs = local_epochs
         self.lr = learning_rate
         self.degraded_model_refinement_learning_rate = (
@@ -33,6 +42,9 @@ class FlowerClient(NumPyClient):
         self.momentum = momentum
         self.unlearning_trigger_client = unlearning_trigger_client
         self.unlearning_trigger_round = unlearning_trigger_round
+        self.client_folder_path = os.path.join(
+            dataset_folder_path, f"client_{client_number}"
+        )
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Configure logging
@@ -76,8 +88,20 @@ class FlowerClient(NumPyClient):
             results = {"unlearn_client_number": self.client_number}
             unlearn_client_number = self.client_number
 
-        train_batches = load_client_data("train", self.client_number, current_round)
-        val_batches = load_client_data("val", self.client_number)
+        dataloader = DataLoader(dataset_name=self.dataset_name)
+
+        train_dataloader = dataloader.load_dataset(
+            "train_data",
+            self.client_folder_path,
+            self.num_batches_each_round,
+            self.batch_size,
+        )
+        val_dataloader = dataloader.load_dataset(
+            "val_data",
+            self.client_folder_path,
+            self.num_batches_each_round,
+            self.batch_size,
+        )
 
         if command == "degraded_model_refinement":
             learning_rate = self.degraded_model_refinement_learning_rate
@@ -94,8 +118,8 @@ class FlowerClient(NumPyClient):
 
         train_results = train(
             self.net,
-            train_batches,
-            val_batches,
+            train_dataloader,
+            val_dataloader,
             self.local_epochs,
             learning_rate,
             self.device,
@@ -107,21 +131,27 @@ class FlowerClient(NumPyClient):
 
         self.logger.info("sga: %s", sga)
         self.logger.info("results %s", results)
-        self.logger.info("dataset_length %s", dataset_length(train_batches))
+        self.logger.info("dataset_length %s", len(train_dataloader.dataset))
         self.logger.info("learning_rate: %s", learning_rate)
         self.logger.info("momentum: %s", momentum)
 
         return (
             get_weights(self.net),
-            dataset_length(train_batches),
+            len(train_dataloader.dataset),
             results,
         )
 
-    def _evaluate_model(self, parameters, type):
+    def _evaluate_model(self, parameters, file_name):
         set_weights(self.net, parameters)
-        val_batches = load_client_data(type, self.client_number)
-        loss, accuracy = test(self.net, val_batches, self.device)
-        val_dataset_length = dataset_length(val_batches)
+        dataloader = DataLoader(dataset_name=self.dataset_name)
+        val_dataloader = dataloader.load_dataset(
+            file_name,
+            self.client_folder_path,
+            self.num_batches_each_round,
+            self.batch_size,
+        )
+        loss, accuracy = test(self.net, val_dataloader, self.device)
+        val_dataset_length = len(val_dataloader.dataset)
 
         self.logger.info("loss: %s", loss)
         self.logger.info("accuracy: %s", accuracy)
@@ -146,11 +176,13 @@ class FlowerClient(NumPyClient):
                 self.client_number,
                 command,
             )
-            self._evaluate_model(parameters, "poisoned")
+            self._evaluate_model(parameters, "poisoned_data")
 
             return 0.0, 0, {"accuracy": 0}
 
-        loss, accuracy, val_dataset_length = self._evaluate_model(parameters, "val")
+        loss, accuracy, val_dataset_length = self._evaluate_model(
+            parameters, "val_data"
+        )
 
         return (
             loss,
@@ -163,6 +195,9 @@ def client_fn(context: Context):
     """Construct a Client that will be run in a ClientApp."""
 
     partition_id = context.node_config["partition-id"]
+    num_batches_each_round = context.run_config["num-batches-each-round"]
+    batch_size = context.run_config["batch-size"]
+    dataset_name = context.run_config["dataset-name"]
     local_epochs = context.run_config["local-epochs"]
     learning_rate = context.run_config["learning-rate"]
     degraded_model_refinement_learning_rate = context.run_config[
@@ -174,10 +209,14 @@ def client_fn(context: Context):
     momentum = context.run_config["momentum"]
     unlearning_trigger_client = context.run_config["unlearning-trigger-client"]
     unlearning_trigger_round = context.run_config["unlearning-trigger-round"]
+    dataset_folder_path = context.run_config["dataset-folder-path"]
 
     # Return Client instance
     return FlowerClient(
         partition_id,
+        num_batches_each_round,
+        batch_size,
+        dataset_name,
         local_epochs,
         learning_rate,
         degraded_model_refinement_learning_rate,
@@ -185,6 +224,7 @@ def client_fn(context: Context):
         momentum,
         unlearning_trigger_client,
         unlearning_trigger_round,
+        dataset_folder_path,
     ).to_client()
 
 
