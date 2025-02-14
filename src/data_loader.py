@@ -212,7 +212,12 @@ class DataLoader:
                     client_dataset_folder_path, "poisoned_data"
                 )
 
+                clean_train_path = os.path.join(
+                    client_dataset_folder_path, "clean_train_data"
+                )
+
                 poisoned_partition.save_to_disk(poisoned_path)
+                partition_train_test["train"].save_to_disk(clean_train_path)
             else:
                 train_partition = partition_train_test["train"]
                 test_partition = partition_train_test["test"]
