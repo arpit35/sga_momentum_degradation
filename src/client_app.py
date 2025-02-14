@@ -5,7 +5,7 @@ from flwr.client import ClientApp, NumPyClient
 from flwr.common import Context
 
 from src.data_loader import DataLoader
-from src.ml_models.net import Net, test, train
+from src.ml_models.net import get_net, test, train
 from src.ml_models.utils import get_weights, set_weights
 from src.utils.logger import get_logger
 
@@ -17,7 +17,6 @@ class FlowerClient(NumPyClient):
         client_number,
         num_batches_each_round,
         batch_size,
-        dataset_name,
         local_epochs,
         learning_rate,
         degraded_model_refinement_learning_rate,
@@ -26,13 +25,18 @@ class FlowerClient(NumPyClient):
         unlearning_trigger_client,
         unlearning_trigger_round,
         dataset_folder_path,
+        dataset_num_channels,
+        dataset_num_classes,
+        dataset_input_feature,
+        dataset_target_feature,
+        model_name,
+        model_input_image_size,
     ):
         super().__init__()
-        self.net = Net()
+        self.net = get_net(dataset_num_channels, dataset_num_classes, model_name)
         self.client_number = client_number
         self.num_batches_each_round = num_batches_each_round
         self.batch_size = batch_size
-        self.dataset_name = dataset_name
         self.local_epochs = local_epochs
         self.lr = learning_rate
         self.degraded_model_refinement_learning_rate = (
@@ -45,6 +49,11 @@ class FlowerClient(NumPyClient):
         self.client_folder_path = os.path.join(
             dataset_folder_path, f"client_{client_number}"
         )
+        self.dataset_num_channels = dataset_num_channels
+        self.dataset_input_feature = dataset_input_feature
+        self.dataset_target_feature = dataset_target_feature
+        self.model_input_image_size = model_input_image_size
+
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         # Configure logging
@@ -88,15 +97,19 @@ class FlowerClient(NumPyClient):
             results = {"unlearn_client_number": self.client_number}
             unlearn_client_number = self.client_number
 
-        dataloader = DataLoader(dataset_name=self.dataset_name)
+        dataloader = DataLoader(
+            dataset_input_feature=self.dataset_input_feature,
+            dataset_num_channels=self.dataset_num_channels,
+            model_input_image_size=self.model_input_image_size,
+        )
 
-        train_dataloader = dataloader.load_dataset(
+        train_dataloader = dataloader.load_dataset_from_disk(
             "train_data",
             self.client_folder_path,
             self.num_batches_each_round,
             self.batch_size,
         )
-        val_dataloader = dataloader.load_dataset(
+        val_dataloader = dataloader.load_dataset_from_disk(
             "val_data",
             self.client_folder_path,
             self.num_batches_each_round,
@@ -124,6 +137,8 @@ class FlowerClient(NumPyClient):
             learning_rate,
             self.device,
             momentum,
+            self.dataset_input_feature,
+            self.dataset_target_feature,
             sga,
         )
 
@@ -143,14 +158,26 @@ class FlowerClient(NumPyClient):
 
     def _evaluate_model(self, parameters, file_name):
         set_weights(self.net, parameters)
-        dataloader = DataLoader(dataset_name=self.dataset_name)
-        val_dataloader = dataloader.load_dataset(
+
+        dataloader = DataLoader(
+            dataset_input_feature=self.dataset_input_feature,
+            dataset_num_channels=self.dataset_num_channels,
+            model_input_image_size=self.model_input_image_size,
+        )
+
+        val_dataloader = dataloader.load_dataset_from_disk(
             file_name,
             self.client_folder_path,
             self.num_batches_each_round,
             self.batch_size,
         )
-        loss, accuracy = test(self.net, val_dataloader, self.device)
+        loss, accuracy = test(
+            self.net,
+            val_dataloader,
+            self.device,
+            self.dataset_input_feature,
+            self.dataset_target_feature,
+        )
         val_dataset_length = len(val_dataloader.dataset)
 
         self.logger.info("loss: %s", loss)
@@ -211,7 +238,6 @@ def client_fn(context: Context):
     partition_id = context.node_config["partition-id"]
     num_batches_each_round = context.run_config["num-batches-each-round"]
     batch_size = context.run_config["batch-size"]
-    dataset_name = context.run_config["dataset-name"]
     local_epochs = context.run_config["local-epochs"]
     learning_rate = context.run_config["learning-rate"]
     degraded_model_refinement_learning_rate = context.run_config[
@@ -224,13 +250,18 @@ def client_fn(context: Context):
     unlearning_trigger_client = context.run_config["unlearning-trigger-client"]
     unlearning_trigger_round = context.run_config["unlearning-trigger-round"]
     dataset_folder_path = context.run_config["dataset-folder-path"]
+    dataset_num_channels = context.run_config["dataset-num-channels"]
+    dataset_num_classes = context.run_config["dataset-num-classes"]
+    dataset_input_feature = context.run_config["dataset-input-feature"]
+    dataset_target_feature = context.run_config["dataset-target-feature"]
+    model_name = context.run_config["model-name"]
+    model_input_image_size = context.run_config["model-input-image-size"]
 
     # Return Client instance
     return FlowerClient(
         partition_id,
         num_batches_each_round,
         batch_size,
-        dataset_name,
         local_epochs,
         learning_rate,
         degraded_model_refinement_learning_rate,
@@ -239,6 +270,12 @@ def client_fn(context: Context):
         unlearning_trigger_client,
         unlearning_trigger_round,
         dataset_folder_path,
+        dataset_num_channels,
+        dataset_num_classes,
+        dataset_input_feature,
+        dataset_target_feature,
+        model_name,
+        model_input_image_size,
     ).to_client()
 
 

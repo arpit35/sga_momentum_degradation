@@ -1,6 +1,9 @@
+import re
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
 
 
 class Net(nn.Module):
@@ -46,8 +49,42 @@ class Net(nn.Module):
         return x
 
 
+def get_net(dataset_num_channels, dataset_num_classes, model_name):
+    model_func = getattr(models, model_name, None)
+    if model_func is None:
+        raise ValueError(f"Model '{model_name}' not found in torchvision.models")
+
+    # Load model without pretrained weights
+    model = model_func(weights=None)
+
+    if re.search(r"resnet", model_name, re.IGNORECASE):
+        # Modify the first convolution layer
+        model.conv1 = nn.Conv2d(
+            in_channels=dataset_num_channels,  # Change from 3 to 1
+            out_channels=64,
+            kernel_size=7,
+            stride=2,
+            padding=3,
+            bias=False,
+        )
+
+        # Modify the final fully connected layer
+        model.fc = nn.Linear(model.fc.in_features, dataset_num_classes)
+
+    return model
+
+
 def train(
-    net, train_batches, val_batches, epochs, learning_rate, device, momentum, SGA=False
+    net,
+    train_batches,
+    val_batches,
+    epochs,
+    learning_rate,
+    device,
+    momentum,
+    dataset_input_feature,
+    dataset_target_feature,
+    SGA=False,
 ):
     net.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
@@ -59,13 +96,19 @@ def train(
 
     for _ in range(epochs):
         for batch in train_batches:
-            images = batch["image"]
-            labels = batch["label"]
+            images = batch[dataset_input_feature]
+            labels = batch[dataset_target_feature]
             optimizer.zero_grad()
             criterion(net(images.to(device)), labels.to(device)).backward()
             optimizer.step()
 
-    val_loss, val_acc = test(net, val_batches, device)
+    val_loss, val_acc = test(
+        net,
+        val_batches,
+        device,
+        dataset_input_feature,
+        dataset_target_feature,
+    )
 
     results = {
         "val_loss": val_loss,
@@ -74,15 +117,21 @@ def train(
     return results
 
 
-def test(net, test_batches, device):
+def test(
+    net,
+    test_batches,
+    device,
+    dataset_input_feature,
+    dataset_target_feature,
+):
     """Validate the model on the test set."""
     net.to(device)  # move model to GPU if available
     criterion = torch.nn.CrossEntropyLoss()
     correct, loss = 0, 0.0
     with torch.no_grad():
         for batch in test_batches:
-            images = batch["image"].to(device)
-            labels = batch["label"].to(device)
+            images = batch[dataset_input_feature].to(device)
+            labels = batch[dataset_target_feature].to(device)
             outputs = net(images)
             loss += criterion(outputs, labels).item()
             correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()

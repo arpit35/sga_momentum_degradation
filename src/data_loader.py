@@ -12,30 +12,50 @@ from torchvision import transforms
 class DataLoader:
     def __init__(
         self,
-        dataset_name: str,
+        dataset_input_feature: str,
+        dataset_target_feature: str = None,
+        dataset_name: str = None,
+        dataset_num_channels: int = None,
+        model_input_image_size: int = None,
     ):
         self.dataset_name = dataset_name
-        if self.dataset_name == "mnist":
-            self.pytorch_transforms = transforms.Compose(
-                [
-                    transforms.ToTensor(),
-                    transforms.Normalize((0.5,), (0.5,)),
-                ]
+        self.dataset_input_feature = dataset_input_feature
+        self.dataset_target_feature = dataset_target_feature
+
+        if dataset_name is None:
+            self.pytorch_transforms = self._get_transform(
+                dataset_num_channels, model_input_image_size
             )
 
+    def _get_transform(self, dataset_num_channels, model_input_image_size):
+        if dataset_num_channels == 1:
+            # For grayscale images
+            normalize = transforms.Normalize((0.5,), (0.5,))
+        elif dataset_num_channels == 3:
+            # For RGB images
+            normalize = transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        else:
+            raise ValueError(f"Unsupported number of channels: {dataset_num_channels}")
+
+        transform = transforms.Compose(
+            [
+                transforms.Resize((model_input_image_size, model_input_image_size)),
+                transforms.ToTensor(),
+                normalize,
+            ]
+        )
+        return transform
+
     def _apply_transforms(self, batch):
-        batch["image"] = [self.pytorch_transforms(img) for img in batch["image"]]
+        batch[self.dataset_input_feature] = [
+            self.pytorch_transforms(img) for img in batch[self.dataset_input_feature]
+        ]
         return batch
 
     def _load_partition(self, num_clients: int, alpha: float):
-        if self.dataset_name == "mnist":
-            partition_by = "label"
-        else:
-            raise ValueError("Unknown dataset")
-
         partitioner = DirichletPartitioner(
             num_partitions=num_clients,
-            partition_by=partition_by,
+            partition_by=self.dataset_target_feature,
             alpha=alpha,
             self_balancing=True,
         )
@@ -95,7 +115,7 @@ class DataLoader:
     def _add_backdoor_to_partition(self, partition, data_type, target_class):
 
         # Get the labels from the partition
-        labels = partition["label"]
+        labels = partition[self.dataset_target_feature]
 
         class_indices = defaultdict(list)
         for i, label in enumerate(labels):
@@ -115,8 +135,10 @@ class DataLoader:
 
         def _add_trigger_if_poisoned(sample, idx):
             if idx in poison_indices:
-                sample["image"] = self._add_trigger_to_sample(sample["image"])
-                sample["label"] = target_class
+                sample[self.dataset_input_feature] = self._add_trigger_to_sample(
+                    sample[self.dataset_input_feature]
+                )
+                sample[self.dataset_target_feature] = target_class
                 sample["poisoned"] = True  # Add a new column to track poisoned samples
             else:
                 sample["poisoned"] = False
@@ -140,7 +162,7 @@ class DataLoader:
 
         return partition.remove_columns(["poisoned"])
 
-    def save_datasets(
+    def save_datasets_to_disk(
         self,
         num_clients: int,
         alpha: float,
@@ -156,19 +178,22 @@ class DataLoader:
 
             partition = fds.load_partition(client_id)
 
-            labels = partition["label"]
+            labels = partition[self.dataset_target_feature]
             # Compute the unique classes and their counts
             unique_classes, counts = np.unique(labels, return_counts=True)
 
             # Filter out classes with only one row
             classes_to_keep = set(unique_classes[counts > 1])
             partition = partition.filter(
-                lambda example, keep=classes_to_keep: example["label"] in keep,
+                lambda example, keep=classes_to_keep: example[
+                    self.dataset_target_feature
+                ]
+                in keep,
                 load_from_cache_file=False,
             )
 
             partition_train_test = partition.train_test_split(
-                test_size=0.2, seed=42, stratify_by_column="label"
+                test_size=0.2, seed=42, stratify_by_column=self.dataset_target_feature
             )
 
             if unlearning_trigger_client == client_id:
@@ -198,7 +223,7 @@ class DataLoader:
             train_partition.save_to_disk(train_path)
             test_partition.save_to_disk(val_path)
 
-    def load_dataset(
+    def load_dataset_from_disk(
         self, file_name: str, client_folder_path, num_batches_each_round, batch_size
     ):
         client_file_path = os.path.join(client_folder_path, file_name)

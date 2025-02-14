@@ -16,12 +16,18 @@ def prepare_dataset(
     dataset_name = str(config.get("dataset-name", None))
     alpha = float(config.get("data-loader-alpha", 0))
     unlearning_trigger_client = int(config.get("unlearning-trigger-client", 0))
+    dataset_input_feature = str(config.get("dataset-input-feature", None))
+    dataset_target_feature = str(config.get("dataset-target-feature", None))
 
     clear_folder_contents(dataset_folder_path)
 
-    dataloader = DataLoader(dataset_name=dataset_name)
+    dataloader = DataLoader(
+        dataset_input_feature=dataset_input_feature,
+        dataset_target_feature=dataset_target_feature,
+        dataset_name=dataset_name,
+    )
 
-    dataloader.save_datasets(
+    dataloader.save_datasets_to_disk(
         num_clients=num_of_clients,
         alpha=alpha,
         dataset_folder_path=dataset_folder_path,

@@ -16,7 +16,7 @@ from flwr.server import ServerApp, ServerAppComponents, ServerConfig
 from flwr.server.strategy import FedAvg
 from flwr.server.strategy.aggregate import aggregate_inplace
 
-from src.ml_models.net import Net
+from src.ml_models.net import get_net
 from src.ml_models.utils import get_weights
 
 # from src.utils.json_encoder import CustomEncoder
@@ -66,6 +66,9 @@ class UnlearningFedAvg(FedAvg):
         num_server_rounds,
         weight_factor_degradation_model,
         weight_factor_global_model,
+        dataset_num_channels,
+        dataset_num_classes,
+        model_name,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -78,6 +81,9 @@ class UnlearningFedAvg(FedAvg):
         self.num_server_rounds = num_server_rounds
         self.weight_factor_degradation_model = weight_factor_degradation_model
         self.weight_factor_global_model = weight_factor_global_model
+        self.dataset_num_channels = dataset_num_channels
+        self.dataset_num_classes = dataset_num_classes
+        self.model_name = model_name
 
         self.degraded_model_parameters = None
         self.global_model_parameters = None
@@ -155,7 +161,13 @@ class UnlearningFedAvg(FedAvg):
                 )
                 self.unlearn_client_id = client_proxy.cid
 
-                initial_degraded_model_with_rand_parameters = get_weights(Net())
+                initial_degraded_model_with_rand_parameters = get_weights(
+                    get_net(
+                        self.dataset_num_channels,
+                        self.dataset_num_classes,
+                        self.model_name,
+                    )
+                )
                 self.degraded_model_parameters = ndarrays_to_parameters(
                     custom_aggregate(
                         [
@@ -262,7 +274,12 @@ class UnlearningFedAvg(FedAvg):
 def server_fn(context: Context):
     print("context.node_config", context)
     # Initialize model parameters
-    ndarrays = get_weights(Net())
+    dataset_num_channels = int(context.run_config["dataset-num-channels"])
+    dataset_num_classes = int(context.run_config["dataset-num-classes"])
+    model_name = str(context.run_config["model-name"])
+    ndarrays = get_weights(
+        get_net(dataset_num_channels, dataset_num_classes, model_name)
+    )
     parameters = ndarrays_to_parameters(ndarrays)
 
     # Define the strategy
@@ -278,6 +295,9 @@ def server_fn(context: Context):
         weight_factor_global_model=float(
             context.run_config["weight-factor-global-model"]
         ),
+        dataset_num_channels=dataset_num_channels,
+        dataset_num_classes=dataset_num_classes,
+        model_name=model_name,
     )
     config = ServerConfig(num_rounds=int(context.run_config["num-server-rounds"]))
 

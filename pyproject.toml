@@ -22,7 +22,7 @@ clientapp = "src.client_app:app"
 unlearning-trigger-client = 0
 unlearning-trigger-round = 101
 num-of-clients = 5
-momentum = 0.9
+momentum = 0
 num-server-rounds = 120
 num-batches-each-round = 5
 weight-factor-degradation-model = 0.50
@@ -33,13 +33,21 @@ learning-rate = 0.005
 degraded-model-refinement-learning-rate = 0.01
 degraded-model-unlearning-rate = 0.005
 batch-size = 128
-dataset-name = "mnist"
 data-loader-alpha = 0.1
-prepare-dataset = false
+prepare-dataset = true
 
 # Paths
 logs-folder-path = "log"
 dataset-folder-path = "src/clients_dataset"
+
+# Dataset and Model Configuration
+dataset-name = "mnist"
+dataset-num-channels = 1
+dataset-num-classes = 10
+dataset-input-feature = "image"
+dataset-target-feature = "label"
+model-name = "resnet18"
+model-input-image-size = 224
 
 [tool.flwr.federations]
 default = "local-simulation"
