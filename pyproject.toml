@@ -24,17 +24,18 @@ unlearning-trigger-round = 101
 num-of-clients = 5
 momentum = 0
 num-server-rounds = 120
-num-batches-each-round = 5
+num-batches-each-round = 10
 weight-factor-degradation-model = 0.50
 weight-factor-global-model = 0.95
 fraction-evaluate = 1
-local-epochs = 3
-learning-rate = 0.005
+local-epochs = 5
+learning-rate = 0.001
 degraded-model-refinement-learning-rate = 0.01
-degraded-model-unlearning-rate = 0.005
+degraded-model-unlearning-rate = 0.0001
 batch-size = 128
+gradient-accumulation-steps = 4
 data-loader-alpha = 0.1
-prepare-dataset = true
+prepare-dataset = false
 
 # Paths
 logs-folder-path = "log"
@@ -58,7 +59,7 @@ options.num-supernodes = 5
 [tool.flwr.federations.local-simulation-gpu]
 options.num-supernodes = 5
 options.backend.client-resources.num-cpus = 2 # each ClientApp assumes to use 2CPUs
-options.backend.client-resources.num-gpus = 0.2 # at most 5 ClientApp will run in a given GPU
+options.backend.client-resources.num-gpus = 1 # at most 5 ClientApp will run in a given GPU
 
 [tool.pylint.'MESSAGES CONTROL']
 disable = ["missing-docstring"]

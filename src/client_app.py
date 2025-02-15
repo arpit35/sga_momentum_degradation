@@ -17,6 +17,7 @@ class FlowerClient(NumPyClient):
         client_number,
         num_batches_each_round,
         batch_size,
+        gradient_accumulation_steps,
         local_epochs,
         learning_rate,
         degraded_model_refinement_learning_rate,
@@ -37,6 +38,7 @@ class FlowerClient(NumPyClient):
         self.client_number = client_number
         self.num_batches_each_round = num_batches_each_round
         self.batch_size = batch_size
+        self.gradient_accumulation_steps = gradient_accumulation_steps
         self.local_epochs = local_epochs
         self.lr = learning_rate
         self.degraded_model_refinement_learning_rate = (
@@ -108,12 +110,14 @@ class FlowerClient(NumPyClient):
             self.client_folder_path,
             self.num_batches_each_round,
             self.batch_size,
+            self.gradient_accumulation_steps,
         )
         val_dataloader = dataloader.load_dataset_from_disk(
             "val_data",
             self.client_folder_path,
             self.num_batches_each_round,
             self.batch_size,
+            self.gradient_accumulation_steps,
         )
 
         if command == "degraded_model_refinement":
@@ -139,6 +143,7 @@ class FlowerClient(NumPyClient):
             momentum,
             self.dataset_input_feature,
             self.dataset_target_feature,
+            self.gradient_accumulation_steps,
             sga,
         )
 
@@ -170,6 +175,7 @@ class FlowerClient(NumPyClient):
             self.client_folder_path,
             self.num_batches_each_round,
             self.batch_size,
+            self.gradient_accumulation_steps,
         )
         loss, accuracy = test(
             self.net,
@@ -238,6 +244,7 @@ def client_fn(context: Context):
     partition_id = context.node_config["partition-id"]
     num_batches_each_round = context.run_config["num-batches-each-round"]
     batch_size = context.run_config["batch-size"]
+    gradient_accumulation_steps = context.run_config["gradient-accumulation-steps"]
     local_epochs = context.run_config["local-epochs"]
     learning_rate = context.run_config["learning-rate"]
     degraded_model_refinement_learning_rate = context.run_config[
@@ -262,6 +269,7 @@ def client_fn(context: Context):
         partition_id,
         num_batches_each_round,
         batch_size,
+        gradient_accumulation_steps,
         local_epochs,
         learning_rate,
         degraded_model_refinement_learning_rate,

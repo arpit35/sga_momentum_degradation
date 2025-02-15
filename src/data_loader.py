@@ -229,7 +229,12 @@ class DataLoader:
             test_partition.save_to_disk(val_path)
 
     def load_dataset_from_disk(
-        self, file_name: str, client_folder_path, num_batches_each_round, batch_size
+        self,
+        file_name: str,
+        client_folder_path,
+        num_batches_each_round,
+        batch_size,
+        gradient_accumulation_steps,
     ):
         client_file_path = os.path.join(client_folder_path, file_name)
 
@@ -238,7 +243,12 @@ class DataLoader:
         )
         client_dataset_lenght = len(client_dataset)
         # Calculate the total number of samples to select
-        total_samples = num_batches_each_round * batch_size
+        if file_name == "train_data":
+            total_samples = num_batches_each_round * batch_size
+        else:
+            total_samples = int(
+                num_batches_each_round * (batch_size / gradient_accumulation_steps)
+            )
 
         if client_dataset_lenght > total_samples:
             # Randomly select indices
@@ -250,7 +260,9 @@ class DataLoader:
 
         # Create a PyTorch DataLoader
         data_loader = TorchDataLoader(
-            client_dataset, batch_size=batch_size, shuffle=True
+            client_dataset,
+            batch_size=int(batch_size / gradient_accumulation_steps),
+            shuffle=True,
         )
 
         return data_loader

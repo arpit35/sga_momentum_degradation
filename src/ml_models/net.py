@@ -84,23 +84,39 @@ def train(
     momentum,
     dataset_input_feature,
     dataset_target_feature,
-    SGA=False,
+    gradient_accumulation_steps,
+    sga=False,
 ):
     net.to(device)
     criterion = torch.nn.CrossEntropyLoss().to(device)
 
     optimizer = torch.optim.SGD(
-        net.parameters(), lr=learning_rate, momentum=momentum, maximize=SGA
+        net.parameters(), lr=learning_rate, momentum=momentum, maximize=sga
     )
     net.train()
 
     for _ in range(epochs):
-        for batch in train_batches:
-            images = batch[dataset_input_feature]
-            labels = batch[dataset_target_feature]
-            optimizer.zero_grad()
-            criterion(net(images.to(device)), labels.to(device)).backward()
+        optimizer.zero_grad()
+        for i, batch in enumerate(train_batches):
+            images = batch[dataset_input_feature].to(device)
+            labels = batch[dataset_target_feature].to(device)
+            loss = criterion(net(images), labels)
+
+            # Normalize loss to account for gradient accumulation
+            loss = loss / gradient_accumulation_steps
+            loss.backward()
+
+            # Update weights after accumulating gradients over 'accumulation_steps' mini-batches
+            if (i + 1) % gradient_accumulation_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+
             optimizer.step()
+
+        # Handle the case where the number of batches isn't divisible by accumulation_steps
+        if len(train_batches) % gradient_accumulation_steps != 0:
+            optimizer.step()
+            optimizer.zero_grad()
 
     val_loss, val_acc = test(
         net,
