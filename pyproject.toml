@@ -19,27 +19,44 @@ serverapp = "src.server_app:app"
 clientapp = "src.client_app:app"
 
 [tool.flwr.app.config]
-unlearning-trigger-client = 0
-unlearning-trigger-round = 101
 num-of-clients = 5
 momentum = 0
-num-server-rounds = 120
-num-batches-each-round = 10
-weight-factor-degradation-model = 0.50
-weight-factor-global-model = 0.95
+num-batches-each-round = 20
+weight-factor-degradation-model = 0.40
+weight-factor-global-model = 0.90
 fraction-evaluate = 1
 local-epochs = 5
-learning-rate = 0.001
-degraded-model-refinement-learning-rate = 0.01
-degraded-model-unlearning-rate = 0.0001
 batch-size = 128
 gradient-accumulation-steps = 4
 data-loader-alpha = 0.1
 prepare-dataset = false
 
+# Federated Learning Configuration
+mode = "federated_learning"
+num-server-rounds = 1
+learning-rate = 0.005
+
+# # Federated Unlearning Configuration
+# mode = "federated_unlearning"
+# unlearning-trigger-client = 0
+# unlearning-trigger-round = 0
+# num-server-rounds = 8
+# knowledge-eraser-rounds = 2
+# degraded-model-refinement-learning-rate = 0.01
+# degraded-model-unlearning-rate = 0.001
+# learning-rate = 0.005
+
+# # Retraining Configuration
+# mode = "retraining"
+# unlearning-trigger-client = 0
+# num-server-rounds = 80
+# learning-rate = 0.005
+
 # Paths
 logs-folder-path = "log"
 dataset-folder-path = "src/clients_dataset"
+plots-folder-path = "src/plots"
+models-folder-path = "src/models"
 
 # Dataset and Model Configuration
 dataset-name = "mnist"

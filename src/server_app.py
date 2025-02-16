@@ -1,5 +1,6 @@
 import json
 import os
+import pickle
 from functools import reduce
 from typing import List, Tuple
 
@@ -62,6 +63,7 @@ def custom_aggregate(results: list[tuple[NDArrays, float]]) -> NDArrays:
 class UnlearningFedAvg(FedAvg):
     def __init__(
         self,
+        mode,
         num_of_clients,
         num_server_rounds,
         weight_factor_degradation_model,
@@ -69,6 +71,9 @@ class UnlearningFedAvg(FedAvg):
         dataset_num_channels,
         dataset_num_classes,
         model_name,
+        dataset_name,
+        plots_folder_path,
+        models_folder_path,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -77,6 +82,7 @@ class UnlearningFedAvg(FedAvg):
         self.command = ""
         self.knowledge_eraser_rounds = 0
 
+        self.mode = mode
         self.num_of_clients = num_of_clients
         self.num_server_rounds = num_server_rounds
         self.weight_factor_degradation_model = weight_factor_degradation_model
@@ -84,6 +90,9 @@ class UnlearningFedAvg(FedAvg):
         self.dataset_num_channels = dataset_num_channels
         self.dataset_num_classes = dataset_num_classes
         self.model_name = model_name
+        self.dataset_name = dataset_name
+        self.plots_folder_path = plots_folder_path
+        self.models_folder_path = models_folder_path
 
         self.degraded_model_parameters = None
         self.global_model_parameters = None
@@ -246,14 +255,26 @@ class UnlearningFedAvg(FedAvg):
 
             self.client_plot[client_number][server_round] = {
                 "metrics": json.loads(str(eval_res.metrics).replace("'", '"')),
-                "command": str(self.command),
+                "command": self.command,
             }
 
         if server_round == self.num_server_rounds:
-            with open(
-                os.path.join("src/plots", "results.json"), "w", encoding="utf-8"
-            ) as file:
+            results_file_path = os.path.join(
+                self.plots_folder_path,
+                self.mode,
+                f"{self.dataset_name}_{self.model_name}_results.json",
+            )
+
+            with open(results_file_path, "w", encoding="utf-8") as file:
                 json.dump(self.client_plot, file)
+
+            if self.mode == "federated_learning":
+                model_file_path = os.path.join(
+                    self.models_folder_path,
+                    f"{self.dataset_name}_{self.model_name}_model.pkl",
+                )
+                with open(model_file_path, "wb") as file:
+                    pickle.dump(self.global_model_parameters, file)
 
         if self.command == "degraded_model_initialization":
             self.command = "degraded_model_refinement"
@@ -274,32 +295,56 @@ class UnlearningFedAvg(FedAvg):
 def server_fn(context: Context):
     print("context.node_config", context)
     # Initialize model parameters
-    dataset_num_channels = int(context.run_config["dataset-num-channels"])
-    dataset_num_classes = int(context.run_config["dataset-num-classes"])
-    model_name = str(context.run_config["model-name"])
+    mode = context.run_config.get("mode", None)
+    dataset_num_channels = context.run_config.get("dataset-num-channels", None)
+    dataset_num_classes = context.run_config.get("dataset-num-classes", None)
+    model_name = context.run_config.get("model-name", None)
+    dataset_name = context.run_config.get("dataset-name", None)
     ndarrays = get_weights(
         get_net(dataset_num_channels, dataset_num_classes, model_name)
     )
-    parameters = ndarrays_to_parameters(ndarrays)
+
+    plots_folder_path = context.run_config.get("plots-folder-path", None)
+    models_folder_path = context.run_config.get("models-folder-path", None)
+
+    parameters = None
+    if mode == "federated_learning":
+        parameters = ndarrays_to_parameters(ndarrays)
+    elif mode == "federated_unlearning":
+        model_file_path = os.path.join(
+            models_folder_path, f"{dataset_name}_{model_name}_model.pkl"
+        )
+        with open(model_file_path, "rb") as file:
+            parameters = pickle.load(file)
+
+    fraction_evaluate = context.run_config.get("fraction-evaluate", None)
+    num_of_clients = context.run_config.get("num-of-clients", None)
+    num_server_rounds = context.run_config.get("num-server-rounds", None)
+    weight_factor_degradation_model = context.run_config.get(
+        "weight-factor-degradation-model", None
+    )
+    weight_factor_global_model = context.run_config.get(
+        "weight-factor-global-model", None
+    )
 
     # Define the strategy
     strategy = UnlearningFedAvg(
-        fraction_evaluate=float(context.run_config["fraction-evaluate"]),
+        fraction_evaluate=fraction_evaluate,
         evaluate_metrics_aggregation_fn=weighted_average,
         initial_parameters=parameters,
-        num_of_clients=int(context.run_config["num-of-clients"]),
-        num_server_rounds=int(context.run_config["num-server-rounds"]),
-        weight_factor_degradation_model=float(
-            context.run_config["weight-factor-degradation-model"]
-        ),
-        weight_factor_global_model=float(
-            context.run_config["weight-factor-global-model"]
-        ),
+        mode=mode,
+        num_of_clients=num_of_clients,
+        num_server_rounds=num_server_rounds,
+        weight_factor_degradation_model=weight_factor_degradation_model,
+        weight_factor_global_model=weight_factor_global_model,
         dataset_num_channels=dataset_num_channels,
         dataset_num_classes=dataset_num_classes,
         model_name=model_name,
+        dataset_name=dataset_name,
+        plots_folder_path=plots_folder_path,
+        models_folder_path=models_folder_path,
     )
-    config = ServerConfig(num_rounds=int(context.run_config["num-server-rounds"]))
+    config = ServerConfig(num_rounds=context.run_config["num-server-rounds"])
 
     return ServerAppComponents(strategy=strategy, config=config)
 

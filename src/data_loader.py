@@ -70,9 +70,9 @@ class DataLoader:
         In this example, the trigger is a small 3x3 pattern placed in the
         bottom-right corner of the image. The pattern is defined as follows:
 
-            0   0  255
-            0 255    0
-        255   0  255
+        0    0    255
+        0    255  0
+        255  0    255
 
         For grayscale images ('L' mode), each pixel is set to the scalar value.
         For color images (e.g., 'RGB' mode), each pixel is set by repeating the
@@ -124,7 +124,7 @@ class DataLoader:
 
         poison_indices = []  # list of indices that will be modified
         for _, indices in class_indices.items():
-            num_to_poison = int(0.8 * len(indices))
+            num_to_poison = int(0.75 * len(indices))
 
             # Randomly select indices without replacement
             selected = np.random.choice(indices, size=num_to_poison, replace=False)
@@ -198,7 +198,9 @@ class DataLoader:
 
             if unlearning_trigger_client == client_id:
                 # Identify the target class as the class with the most examples
-                target_class = unique_classes[np.argmax(counts)]
+                valid_classes = unique_classes[counts > 100]
+                valid_counts = counts[counts > 100]
+                target_class = valid_classes[np.argmin(valid_counts)]
                 print("Target class selected for backdoor:", target_class)
 
                 train_partition, poisoned_partition = self._add_backdoor_to_partition(

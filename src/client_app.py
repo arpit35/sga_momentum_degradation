@@ -32,6 +32,7 @@ class FlowerClient(NumPyClient):
         dataset_target_feature,
         model_name,
         model_input_image_size,
+        mode,
     ):
         super().__init__()
         self.net = get_net(dataset_num_channels, dataset_num_classes, model_name)
@@ -55,6 +56,7 @@ class FlowerClient(NumPyClient):
         self.dataset_input_feature = dataset_input_feature
         self.dataset_target_feature = dataset_target_feature
         self.model_input_image_size = model_input_image_size
+        self.mode = mode
 
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -92,6 +94,7 @@ class FlowerClient(NumPyClient):
         if (
             current_round == self.unlearning_trigger_round
             and self.client_number == self.unlearning_trigger_client
+            and self.mode == "federated_unlearning"
         ):
             self.logger.info(
                 "Unlearning initiated by the client: %s", self.client_number
@@ -241,28 +244,33 @@ class FlowerClient(NumPyClient):
 def client_fn(context: Context):
     """Construct a Client that will be run in a ClientApp."""
 
-    partition_id = context.node_config["partition-id"]
-    num_batches_each_round = context.run_config["num-batches-each-round"]
-    batch_size = context.run_config["batch-size"]
-    gradient_accumulation_steps = context.run_config["gradient-accumulation-steps"]
-    local_epochs = context.run_config["local-epochs"]
-    learning_rate = context.run_config["learning-rate"]
-    degraded_model_refinement_learning_rate = context.run_config[
-        "degraded-model-refinement-learning-rate"
-    ]
-    degraded_model_unlearning_rate = context.run_config[
-        "degraded-model-unlearning-rate"
-    ]
-    momentum = context.run_config["momentum"]
-    unlearning_trigger_client = context.run_config["unlearning-trigger-client"]
-    unlearning_trigger_round = context.run_config["unlearning-trigger-round"]
-    dataset_folder_path = context.run_config["dataset-folder-path"]
-    dataset_num_channels = context.run_config["dataset-num-channels"]
-    dataset_num_classes = context.run_config["dataset-num-classes"]
-    dataset_input_feature = context.run_config["dataset-input-feature"]
-    dataset_target_feature = context.run_config["dataset-target-feature"]
-    model_name = context.run_config["model-name"]
-    model_input_image_size = context.run_config["model-input-image-size"]
+    partition_id = context.node_config.get("partition-id", None)
+    num_batches_each_round = context.run_config.get("num-batches-each-round", None)
+    batch_size = context.run_config.get("batch-size", None)
+    gradient_accumulation_steps = context.run_config.get(
+        "gradient-accumulation-steps", None
+    )
+    local_epochs = context.run_config.get("local-epochs", None)
+    learning_rate = context.run_config.get("learning-rate", None)
+    degraded_model_refinement_learning_rate = context.run_config.get(
+        "degraded-model-refinement-learning-rate", None
+    )
+    degraded_model_unlearning_rate = context.run_config.get(
+        "degraded-model-unlearning-rate", None
+    )
+    momentum = context.run_config.get("momentum", None)
+    unlearning_trigger_client = context.run_config.get(
+        "unlearning-trigger-client", None
+    )
+    unlearning_trigger_round = context.run_config.get("unlearning-trigger-round", None)
+    dataset_folder_path = context.run_config.get("dataset-folder-path", None)
+    dataset_num_channels = context.run_config.get("dataset-num-channels", None)
+    dataset_num_classes = context.run_config.get("dataset-num-classes", None)
+    dataset_input_feature = context.run_config.get("dataset-input-feature", None)
+    dataset_target_feature = context.run_config.get("dataset-target-feature", None)
+    model_name = context.run_config.get("model-name", None)
+    model_input_image_size = context.run_config.get("model-input-image-size", None)
+    mode = context.node_config.get("mode", None)
 
     # Return Client instance
     return FlowerClient(
@@ -284,6 +292,7 @@ def client_fn(context: Context):
         dataset_target_feature,
         model_name,
         model_input_image_size,
+        mode,
     ).to_client()
 
 
