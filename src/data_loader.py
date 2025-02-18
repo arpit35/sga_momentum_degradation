@@ -248,9 +248,7 @@ class DataLoader:
         if file_name == "train_data":
             total_samples = num_batches_each_round * batch_size
         else:
-            total_samples = int(
-                num_batches_each_round * (batch_size / gradient_accumulation_steps)
-            )
+            total_samples = int(5 * batch_size)
 
         if client_dataset_lenght > total_samples:
             # Randomly select indices

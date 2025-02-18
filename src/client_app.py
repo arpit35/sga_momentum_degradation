@@ -80,27 +80,19 @@ class FlowerClient(NumPyClient):
         if self.client_number == unlearn_client_number and (
             command == "degraded_model_refinement"
             or command == "global_model_restoration"
+            or self.mode == "retraining"
         ):
+            results = {}
+
+            if current_round == self.unlearning_trigger_round:
+                results = {"unlearn_client_number": self.client_number}
+
             self.logger.info(
                 "Client %s is not taking part due to '%s' command",
                 self.client_number,
                 command,
             )
-            return [], 0, {}
-
-        results = {}
-
-        # Unlearning initiated by the client
-        if (
-            current_round == self.unlearning_trigger_round
-            and self.client_number == self.unlearning_trigger_client
-            and self.mode == "federated_unlearning"
-        ):
-            self.logger.info(
-                "Unlearning initiated by the client: %s", self.client_number
-            )
-            results = {"unlearn_client_number": self.client_number}
-            unlearn_client_number = self.client_number
+            return [], 0, results
 
         dataloader = DataLoader(
             dataset_input_feature=self.dataset_input_feature,
@@ -126,7 +118,10 @@ class FlowerClient(NumPyClient):
         if command == "degraded_model_refinement":
             learning_rate = self.degraded_model_refinement_learning_rate
             momentum = self.momentum
-        elif unlearn_client_number == self.client_number:
+        elif (
+            unlearn_client_number == self.client_number
+            and command == "global_model_restoration_and_degraded_model_unlearning"
+        ):
             sga = True
             learning_rate = self.degraded_model_unlearning_rate
             momentum = 0.0
@@ -150,10 +145,8 @@ class FlowerClient(NumPyClient):
             sga,
         )
 
-        results.update(train_results)
-
         self.logger.info("sga: %s", sga)
-        self.logger.info("results %s", results)
+        self.logger.info("train_results %s", train_results)
         self.logger.info("dataset_length %s", len(train_dataloader.dataset))
         self.logger.info("learning_rate: %s", learning_rate)
         self.logger.info("momentum: %s", momentum)
@@ -161,7 +154,7 @@ class FlowerClient(NumPyClient):
         return (
             get_weights(self.net),
             len(train_dataloader.dataset),
-            results,
+            train_results,
         )
 
     def _evaluate_model(self, parameters, file_name):
@@ -202,9 +195,7 @@ class FlowerClient(NumPyClient):
         command = config.get("command", "")
 
         if (
-            command == "degraded_model_initialization"
-            or command == "global_model_unlearning"
-            or command == "global_model_restoration_and_degraded_model_unlearning"
+            command == "global_model_unlearning"
             or command == "global_model_restoration"
         ) and self.client_number == unlearn_client_number:
             self.logger.info(
@@ -212,9 +203,7 @@ class FlowerClient(NumPyClient):
                 self.client_number,
                 command,
             )
-            loss, accuracy, val_dataset_length = self._evaluate_model(
-                parameters, "poisoned_data"
-            )
+            loss, accuracy, _ = self._evaluate_model(parameters, "poisoned_data")
 
             return (
                 0.0,
@@ -227,9 +216,44 @@ class FlowerClient(NumPyClient):
                 },
             )
 
+        if (
+            command == "global_model_restoration_and_degraded_model_unlearning"
+            and self.client_number == unlearn_client_number
+        ):
+            self.logger.info(
+                "Client %s is not taking part in evaluation due to '%s' command",
+                self.client_number,
+                command,
+            )
+
+            return (
+                0.0,
+                0,
+                {
+                    "accuracy": 0,
+                    "client_number": self.client_number,
+                },
+            )
+
         loss, accuracy, val_dataset_length = self._evaluate_model(
             parameters, "val_data"
         )
+
+        if self.client_number == self.unlearning_trigger_client:
+            loss_poisoned, accuracy_poisoned, _ = self._evaluate_model(
+                parameters, "poisoned_data"
+            )
+
+            return (
+                loss,
+                val_dataset_length,
+                {
+                    "accuracy": accuracy,
+                    "client_number": self.client_number,
+                    "poisoned_data_loss": loss_poisoned,
+                    "poisoned_data_accuracy": accuracy_poisoned,
+                },
+            )
 
         return (
             loss,
@@ -270,7 +294,7 @@ def client_fn(context: Context):
     dataset_target_feature = context.run_config.get("dataset-target-feature", None)
     model_name = context.run_config.get("model-name", None)
     model_input_image_size = context.run_config.get("model-input-image-size", None)
-    mode = context.node_config.get("mode", None)
+    mode = context.run_config.get("mode", None)
 
     # Return Client instance
     return FlowerClient(
