@@ -24,7 +24,6 @@ class FlowerClient(NumPyClient):
         degraded_model_unlearning_rate,
         momentum,
         unlearning_trigger_client,
-        unlearning_trigger_round,
         dataset_folder_path,
         dataset_num_channels,
         dataset_num_classes,
@@ -48,7 +47,6 @@ class FlowerClient(NumPyClient):
         self.degraded_model_unlearning_rate = degraded_model_unlearning_rate
         self.momentum = momentum
         self.unlearning_trigger_client = unlearning_trigger_client
-        self.unlearning_trigger_round = unlearning_trigger_round
         self.client_folder_path = os.path.join(
             dataset_folder_path, f"client_{client_number}"
         )
@@ -65,9 +63,25 @@ class FlowerClient(NumPyClient):
 
         self.logger.info("Client %s initiated", self.client_number)
 
-    def fit(self, parameters, config):
+    def _get_training_config(self, unlearn_client_number, command):
         sga = False
+        if command == "degraded_model_refinement":
+            learning_rate = self.degraded_model_refinement_learning_rate
+            momentum = self.momentum
+        elif (
+            unlearn_client_number == self.client_number
+            and command == "global_model_restoration_and_degraded_model_unlearning"
+        ):
+            sga = True
+            learning_rate = self.degraded_model_unlearning_rate
+            momentum = 0.0
+        else:
+            learning_rate = self.lr
+            momentum = self.momentum
 
+        return learning_rate, momentum, sga
+
+    def fit(self, parameters, config):
         # Fetching configuration settings from the server for the fit operation (server.configure_fit)
         current_round = config.get("current_round", 0)
         command = config.get("command", "")
@@ -77,22 +91,18 @@ class FlowerClient(NumPyClient):
         self.logger.info("Client %s | Round %s", self.client_number, current_round)
 
         # target client is not taking part when the command is "degraded_model_refinement" or "global_model_restoration"
-        if self.client_number == unlearn_client_number and (
-            command == "degraded_model_refinement"
-            or command == "global_model_restoration"
-            or self.mode == "retraining"
-        ):
-            results = {}
-
-            if current_round == self.unlearning_trigger_round:
-                results = {"unlearn_client_number": self.client_number}
-
-            self.logger.info(
-                "Client %s is not taking part due to '%s' command",
-                self.client_number,
-                command,
-            )
-            return [], 0, results
+        if self.client_number == unlearn_client_number:
+            if (
+                command == "degraded_model_refinement"
+                or command == "global_model_restoration"
+                or self.mode == "retraining"
+            ):
+                self.logger.info(
+                    "Client %s is not taking part due to '%s' command",
+                    self.client_number,
+                    command,
+                )
+                return [], 0, {}
 
         dataloader = DataLoader(
             dataset_input_feature=self.dataset_input_feature,
@@ -115,19 +125,9 @@ class FlowerClient(NumPyClient):
             self.gradient_accumulation_steps,
         )
 
-        if command == "degraded_model_refinement":
-            learning_rate = self.degraded_model_refinement_learning_rate
-            momentum = self.momentum
-        elif (
-            unlearn_client_number == self.client_number
-            and command == "global_model_restoration_and_degraded_model_unlearning"
-        ):
-            sga = True
-            learning_rate = self.degraded_model_unlearning_rate
-            momentum = 0.0
-        else:
-            learning_rate = self.lr
-            momentum = self.momentum
+        learning_rate, momentum, sga = self._get_training_config(
+            unlearn_client_number, command
+        )
 
         set_weights(self.net, parameters)
 
@@ -188,16 +188,48 @@ class FlowerClient(NumPyClient):
 
         return loss, accuracy, val_dataset_length
 
-    def evaluate(self, parameters, config):
-        self.logger.info("config: %s", config)
+    def _evaluate_federated_learning(self, parameters):
+        loss, accuracy, val_dataset_length = self._evaluate_model(
+            parameters, "val_data"
+        )
 
-        unlearn_client_number = config.get("unlearn_client_number", -1)
-        command = config.get("command", "")
+        loss_poisoned, accuracy_poisoned, _ = self._evaluate_model(
+            parameters, "poisoned_data"
+        )
 
+        return (
+            loss,
+            val_dataset_length,
+            {
+                "accuracy": accuracy,
+                "client_number": self.client_number,
+                "poisoned_data_loss": loss_poisoned,
+                "poisoned_data_accuracy": accuracy_poisoned,
+            },
+        )
+
+    def _evaluate_retraining(self, parameters):
+        loss_poisoned, accuracy_poisoned, _ = self._evaluate_model(
+            parameters, "poisoned_data"
+        )
+
+        return (
+            0.0,
+            0,
+            {
+                "accuracy": 0,
+                "client_number": self.client_number,
+                "poisoned_data_loss": loss_poisoned,
+                "poisoned_data_accuracy": accuracy_poisoned,
+            },
+        )
+
+    def _evaluate_federated_unlearning(self, parameters, command):
         if (
             command == "global_model_unlearning"
             or command == "global_model_restoration"
-        ) and self.client_number == unlearn_client_number:
+            or command == "global_model_restoration_and_degraded_model_unlearning"
+        ):
             self.logger.info(
                 "Client %s is not taking part in evaluation due to '%s' command",
                 self.client_number,
@@ -216,44 +248,23 @@ class FlowerClient(NumPyClient):
                 },
             )
 
-        if (
-            command == "global_model_restoration_and_degraded_model_unlearning"
-            and self.client_number == unlearn_client_number
-        ):
-            self.logger.info(
-                "Client %s is not taking part in evaluation due to '%s' command",
-                self.client_number,
-                command,
-            )
+    def evaluate(self, parameters, config):
+        self.logger.info("config: %s", config)
 
-            return (
-                0.0,
-                0,
-                {
-                    "accuracy": 0,
-                    "client_number": self.client_number,
-                },
-            )
+        unlearn_client_number = config.get("unlearn_client_number", -1)
+        command = config.get("command", "")
+
+        if self.client_number == unlearn_client_number:
+            if self.mode == "federated_learning":
+                return self._evaluate_federated_learning(parameters)
+            elif self.mode == "retraining":
+                return self._evaluate_retraining(parameters)
+            elif self.mode == "federated_unlearning":
+                return self._evaluate_federated_unlearning(parameters, command)
 
         loss, accuracy, val_dataset_length = self._evaluate_model(
             parameters, "val_data"
         )
-
-        if self.client_number == self.unlearning_trigger_client:
-            loss_poisoned, accuracy_poisoned, _ = self._evaluate_model(
-                parameters, "poisoned_data"
-            )
-
-            return (
-                loss,
-                val_dataset_length,
-                {
-                    "accuracy": accuracy,
-                    "client_number": self.client_number,
-                    "poisoned_data_loss": loss_poisoned,
-                    "poisoned_data_accuracy": accuracy_poisoned,
-                },
-            )
 
         return (
             loss,
@@ -286,7 +297,6 @@ def client_fn(context: Context):
     unlearning_trigger_client = context.run_config.get(
         "unlearning-trigger-client", None
     )
-    unlearning_trigger_round = context.run_config.get("unlearning-trigger-round", None)
     dataset_folder_path = context.run_config.get("dataset-folder-path", None)
     dataset_num_channels = context.run_config.get("dataset-num-channels", None)
     dataset_num_classes = context.run_config.get("dataset-num-classes", None)
@@ -308,7 +318,6 @@ def client_fn(context: Context):
         degraded_model_unlearning_rate,
         momentum,
         unlearning_trigger_client,
-        unlearning_trigger_round,
         dataset_folder_path,
         dataset_num_channels,
         dataset_num_classes,

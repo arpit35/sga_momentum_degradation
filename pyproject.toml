@@ -38,7 +38,6 @@ unlearning-trigger-client = -1
 
 # # Federated Unlearning Configuration
 # mode = "federated_unlearning"
-# unlearning-trigger-round = 1
 # num-server-rounds = 8
 # knowledge-eraser-rounds = 2
 # degraded-model-refinement-learning-rate = 0.01

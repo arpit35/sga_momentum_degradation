@@ -14,7 +14,6 @@ def configure_evaluate_federated_unlearning(
         if (
             custom_fed_avg_instance.command
             == "global_model_restoration_and_degraded_model_unlearning"
-            and custom_fed_avg_instance.unlearn_client_id == client.cid
         ):
             client_evaluate_pairs.append(
                 (

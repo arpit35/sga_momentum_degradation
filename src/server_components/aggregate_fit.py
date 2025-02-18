@@ -8,7 +8,7 @@ def aggregate_fit_retraining(results):
     filtered_results = []
     for client_proxy, fit_res in results:
         print("fit_res.metrics", fit_res.metrics)
-        if fit_res.metrics.get("accuracy", 0) == 0:
+        if fit_res.metrics.accuracy == 0:
             continue
         filtered_results.append((client_proxy, fit_res))
 
@@ -21,15 +21,15 @@ def aggregate_fit_retraining(results):
     return parameters_aggregated, metrics_aggregated
 
 
-def aggregate_fit_federated_unlearning(custom_fed_avg_instance, results):
+def aggregate_fit_federated_unlearning(custom_fed_avg_instance, server_round, results):
     filtered_results = []
     for client_proxy, fit_res in results:
         print("fit_res.metrics", fit_res.metrics)
-        if fit_res.metrics.get("unlearn_client_number", -1) != -1:
+        if fit_res.metrics.accuracy == 0 and server_round == 1:
             custom_fed_avg_instance.unlearn_client_id = client_proxy.cid
             continue
 
-        elif fit_res.metrics.get("accuracy", 0) == 0:
+        elif fit_res.metrics.accuracy == 0:
             continue
 
         elif (

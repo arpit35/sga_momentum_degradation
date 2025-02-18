@@ -138,7 +138,7 @@ class CustomFedAvg(FedAvg):
         if self.mode == "retraining":
             return aggregate_fit_retraining(results)
         elif self.mode == "federated_unlearning":
-            return aggregate_fit_federated_unlearning(self, results)
+            return aggregate_fit_federated_unlearning(self, server_round, results)
 
     def aggregate_evaluate(self, server_round, results, failures):
 
