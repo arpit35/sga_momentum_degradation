@@ -21,7 +21,7 @@ clientapp = "src.client_app:app"
 [tool.flwr.app.config]
 num-of-clients = 5
 momentum = 0
-learning-rate = 0.001
+learning-rate = 0.005
 num-batches-each-round = 50
 fraction-evaluate = 1
 local-epochs = 5
