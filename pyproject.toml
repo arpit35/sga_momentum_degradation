@@ -29,11 +29,11 @@ batch-size = 128
 gradient-accumulation-steps = 4
 data-loader-alpha = 0.1
 prepare-dataset = false
+unlearning-trigger-client = 0
 
 # Federated Learning Configuration
 mode = "federated_learning"
 num-server-rounds = 100
-unlearning-trigger-client = -1
 
 
 # # Federated Unlearning Configuration
@@ -44,13 +44,11 @@ unlearning-trigger-client = -1
 # degraded-model-unlearning-rate = 0.001
 # weight-factor-degradation-model = 0.40
 # weight-factor-global-model = 0.90
-# unlearning-trigger-client = 0
 
 
 # # Retraining Configuration
 # mode = "retraining"
 # num-server-rounds = 100
-# unlearning-trigger-client = 0
 
 
 # Paths
