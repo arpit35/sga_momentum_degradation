@@ -20,13 +20,13 @@ clientapp = "src.client_app:app"
 
 [tool.flwr.app.config]
 num-of-clients = 5
-momentum = 0
+momentum = 0.9
 learning-rate = 0.005
-num-batches-each-round = 50
+num-batches-each-round = 10
 fraction-evaluate = 1
 local-epochs = 5
-batch-size = 64
-gradient-accumulation-steps = 2
+batch-size = 128
+gradient-accumulation-steps = 4
 data-loader-alpha = 0.1
 prepare-dataset = false
 
@@ -38,7 +38,7 @@ unlearning-trigger-client = -1
 
 # # Federated Unlearning Configuration
 # mode = "federated_unlearning"
-# num-server-rounds = 8
+# num-server-rounds = 6
 # knowledge-eraser-rounds = 2
 # degraded-model-refinement-learning-rate = 0.01
 # degraded-model-unlearning-rate = 0.001

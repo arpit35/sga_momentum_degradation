@@ -9,6 +9,39 @@ from torch.utils.data import DataLoader as TorchDataLoader
 from torchvision import transforms
 
 
+class SelectiveTransforms:
+    def __init__(self, protected_ratio, model_input_image_size):
+        # Random crop back to the target size
+        self.random_crop = transforms.RandomCrop(model_input_image_size)
+        # Alternatively, you could use a random affine transform:
+        self.random_affine = transforms.RandomAffine(
+            degrees=25, translate=(0.2, 0.2), scale=(0.5, 1.2), shear=20
+        )
+        self.color_jitter = transforms.ColorJitter(
+            brightness=0.6, contrast=0.6, saturation=0.6, hue=0.3
+        )
+
+        self.protected_ratio = protected_ratio
+
+    def __call__(self, img):
+        w, h = img.size
+        protected_x_start = int(w * (1 - self.protected_ratio))
+        protected_y_start = int(h * (1 - self.protected_ratio))
+
+        # Extract the lower-right part (protected region)
+        protected_region = img.crop((protected_x_start, protected_y_start, w, h))
+
+        # Apply affine transformations to the entire image
+        img = self.random_crop(img)
+        img = self.random_affine(img)
+        img = self.color_jitter(img)
+
+        # Paste the original protected region back into the transformed image
+        img.paste(protected_region, (protected_x_start, protected_y_start))
+
+        return img
+
+
 class DataLoader:
     def __init__(
         self,
@@ -39,7 +72,11 @@ class DataLoader:
 
         transform = transforms.Compose(
             [
-                transforms.Resize((model_input_image_size, model_input_image_size)),
+                # Resize to a slightly larger image for random cropping
+                transforms.Resize(
+                    (model_input_image_size + 5, model_input_image_size + 5)
+                ),
+                SelectiveTransforms(0.2, model_input_image_size),
                 transforms.ToTensor(),
                 normalize,
             ]

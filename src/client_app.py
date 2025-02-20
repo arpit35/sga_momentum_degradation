@@ -102,7 +102,7 @@ class FlowerClient(NumPyClient):
                     self.client_number,
                     command,
                 )
-                return [], 0, {}
+                return [], 0, {"val_loss": 0.0, "val_accuracy": 0.0}
 
         dataloader = DataLoader(
             dataset_input_feature=self.dataset_input_feature,
