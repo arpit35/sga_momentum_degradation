@@ -12,6 +12,7 @@ from src.server_components.aggregate_evaluate import (
     aggregate_evaluate_federated_unlearning,
 )
 from src.server_components.aggregate_fit import (
+    aggregate_fit_federated_learning,
     aggregate_fit_federated_unlearning,
     aggregate_fit_retraining,
 )
@@ -126,16 +127,15 @@ class CustomFedAvg(FedAvg):
 
     def aggregate_fit(self, server_round, results, failures):
 
-        if self.mode == "federated_learning":
-            return super().aggregate_fit(server_round, results, failures)
-
         if not results:
             return None, {}
         # Do not aggregate if there are failures and failures are not accepted
         if not self.accept_failures and failures:
             return None, {}
 
-        if self.mode == "retraining":
+        if self.mode == "federated_learning":
+            return aggregate_fit_federated_learning(self, results)
+        elif self.mode == "retraining":
             return aggregate_fit_retraining(results)
         elif self.mode == "federated_unlearning":
             return aggregate_fit_federated_unlearning(self, server_round, results)

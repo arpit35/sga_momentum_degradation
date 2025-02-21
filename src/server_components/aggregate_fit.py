@@ -4,6 +4,18 @@ from flwr.server.strategy.aggregate import aggregate_inplace
 from src.server_components.helper import custom_aggregate
 
 
+def aggregate_fit_federated_learning(custom_fed_avg_instance, results):
+    aggregated_ndarrays = aggregate_inplace(results)
+
+    parameters_aggregated = ndarrays_to_parameters(aggregated_ndarrays)
+    custom_fed_avg_instance.global_model_parameters = parameters_aggregated
+
+    # Aggregate custom metrics if aggregation fn was provided
+    metrics_aggregated = {}
+
+    return parameters_aggregated, metrics_aggregated
+
+
 def aggregate_fit_retraining(results):
     filtered_results = []
     for client_proxy, fit_res in results:

@@ -1,4 +1,3 @@
-import copy
 import os
 import pickle
 from functools import reduce
@@ -43,6 +42,4 @@ def save_model_to_disk(custom_fed_avg_instance):
         f"{custom_fed_avg_instance.dataset_name}_{custom_fed_avg_instance.model_name}_model.pkl",
     )
     with open(model_file_path, "wb") as file:
-        pickle.dump(
-            copy.deepcopy(custom_fed_avg_instance.global_model_parameters), file
-        )
+        pickle.dump(custom_fed_avg_instance.global_model_parameters, file)
