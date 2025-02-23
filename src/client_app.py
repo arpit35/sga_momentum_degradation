@@ -182,6 +182,7 @@ class FlowerClient(NumPyClient):
         )
         val_dataset_length = len(val_dataloader.dataset)
 
+        self.logger.info("file_name: %s", file_name)
         self.logger.info("loss: %s", loss)
         self.logger.info("accuracy: %s", accuracy)
         self.logger.info("val_dataset_length: %s", val_dataset_length)

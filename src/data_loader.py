@@ -1,4 +1,5 @@
 import os
+import random
 from collections import defaultdict
 
 import numpy as np
@@ -7,6 +8,24 @@ from flwr_datasets import FederatedDataset
 from flwr_datasets.partitioner import DirichletPartitioner
 from torch.utils.data import DataLoader as TorchDataLoader
 from torchvision import transforms
+
+
+class AddNoise:
+
+    def _add_noise(self, img):
+        width, height = img.size
+        for _ in range(random.randint(5, 10)):
+            rand_x = random.randint(0, width - 1)
+            rand_y = random.randint(0, height - 1)
+            if img.mode == "L":
+                img.putpixel((rand_x, rand_y), 255)
+            else:
+                img.putpixel((rand_x, rand_y), (255,) * 3)
+        return img
+
+    def __call__(self, img):
+        # Add noise to the transformed image
+        return self._add_noise(img)
 
 
 class SelectiveTransforms:
@@ -72,6 +91,7 @@ class DataLoader:
 
         transform = transforms.Compose(
             [
+                AddNoise(),
                 # Resize to a slightly larger image for random cropping
                 transforms.Resize(
                     (model_input_image_size + 5, model_input_image_size + 5)
@@ -235,9 +255,7 @@ class DataLoader:
 
             if unlearning_trigger_client == client_id:
                 # Identify the target class as the class with the most examples
-                valid_classes = unique_classes[counts > 100]
-                valid_counts = counts[counts > 100]
-                target_class = valid_classes[np.argmin(valid_counts)]
+                target_class = unique_classes[np.argmax(counts)]
                 print("Target class selected for backdoor:", target_class)
 
                 train_partition, poisoned_partition = self._add_backdoor_to_partition(
