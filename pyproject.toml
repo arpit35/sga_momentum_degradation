@@ -31,19 +31,19 @@ data-loader-alpha = 0.1
 prepare-dataset = false
 unlearning-trigger-client = 0
 
-# Federated Learning Configuration
-mode = "federated_learning"
-num-server-rounds = 100
+# # Federated Learning Configuration
+# mode = "federated_learning"
+# num-server-rounds = 100
 
 
-# # Federated Unlearning Configuration
-# mode = "federated_unlearning"
-# num-server-rounds = 6
-# knowledge-eraser-rounds = 2
-# degraded-model-refinement-learning-rate = 0.01
-# degraded-model-unlearning-rate = 0.001
-# weight-factor-degradation-model = 0.40
-# weight-factor-global-model = 0.90
+# Federated Unlearning Configuration
+mode = "federated_unlearning"
+num-server-rounds = 6
+knowledge-eraser-rounds = 2
+degraded-model-refinement-learning-rate = 0.01
+degraded-model-unlearning-rate = 0.01
+weight-factor-degradation-model = 0.45
+weight-factor-global-model = 0
 
 
 # # Retraining Configuration
