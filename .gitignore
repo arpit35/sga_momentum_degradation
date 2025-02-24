@@ -163,4 +163,3 @@ cython_debug/
 
 clients_dataset/
 log/
-models/
