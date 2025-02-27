@@ -74,7 +74,7 @@ class FlowerClient(NumPyClient):
         ):
             sga = True
             learning_rate = self.degraded_model_unlearning_rate
-            momentum = 0.0
+            momentum = self.momentum
         else:
             learning_rate = self.lr
             momentum = self.momentum

@@ -41,9 +41,9 @@ mode = "federated_unlearning"
 num-server-rounds = 6
 knowledge-eraser-rounds = 2
 degraded-model-refinement-learning-rate = 0.01
-degraded-model-unlearning-rate = 0.01
-weight-factor-degradation-model = 0.45
-weight-factor-global-model = 0
+degraded-model-unlearning-rate = 0.001
+weight-factor-degradation-model = 0.25
+weight-factor-global-model = 0.95
 
 
 # # Retraining Configuration
